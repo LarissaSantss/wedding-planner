@@ -53,18 +53,64 @@ export {
   updateRecord,
   deleteRecord,
   subscribeToTable,
+  // Events
+  fetchUserEvents,
+  fetchEventById,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  // Guests
+  fetchGuestsByEvent,
+  createGuest,
+  updateGuest,
+  deleteGuest,
+  // Vendors
+  fetchVendorsByEvent,
+  createVendor,
+  updateVendor,
+  deleteVendor,
+  // Tasks
+  fetchTasksByEvent,
+  createTask,
+  updateTask,
+  deleteTask,
+  // Expenses
+  fetchExpensesByEvent,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  // Gift Registry
+  fetchGiftRegistryByEvent,
+  createGiftRegistryItem,
+  updateGiftRegistryItem,
+  deleteGiftRegistryItem,
 } from './database'
+export type { QueryResult, QueryListResult, QueryOptions } from './database'
 
 // Tipos
 export type {
   User,
   Session,
   Profile,
-  Wedding,
+  Event,
+  EventType,
+  ThemePreset,
+  EventStatus,
+  RsvpStatus,
+  VendorStatus,
+  TaskPriority,
+  UserRole,
   Guest,
   Vendor,
   Task,
   Expense,
   GiftRegistryItem,
+  EventInsert,
+  EventUpdate,
+  GuestInsert,
+  VendorInsert,
+  TaskInsert,
+  ExpenseInsert,
+  GiftRegistryItemInsert,
   Database,
 } from './types'
