@@ -21,7 +21,6 @@ import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useEvent } from '../../hooks/useEvent'
-import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { getThemeStyle } from '../../utils/theme'
 import { AuthScreen } from '../auth/AuthScreen'
 import { EventDashboard } from './EventDashboard'
@@ -47,28 +46,6 @@ export function EventView() {
   const { event, events, loading: eventLoading, error, refresh, selectEvent, saveEvent } =
     useEvent()
   const [view, setView] = useState<View>('dashboard')
-
-  // Supabase não configurado (variáveis de ambiente ausentes) — evita tela branca
-  if (!isSupabaseConfigured) {
-    return (
-      <div className="dashboard-shell" style={DEFAULT_THEME_STYLE}>
-        <div className="empty-state">
-          <span className="empty-state-icon" aria-hidden="true">
-            ⚙️
-          </span>
-          <h1 className="empty-state-title">Configuração necessária</h1>
-          <p className="empty-state-text">
-            Este projeto usa o Supabase, mas as variáveis de ambiente ainda não foram
-            configuradas neste ambiente.
-          </p>
-          <div style={{ textAlign: 'left', maxWidth: '46ch', fontSize: '0.85rem', color: 'var(--theme-text-muted)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
-            <p><strong>Localmente:</strong> copie <code>.env.example</code> para <code>.env</code> e preencha com seus valores.</p>
-            <p><strong>No Vercel:</strong> acesse <em>Settings → Environment Variables</em> e adicione <code>VITE_SUPABASE_URL</code>, <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> e <code>VITE_SUPABASE_JWKS_URL</code>. Depois faça um <em>Redeploy</em>.</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   // Aguarda autenticação e carregamento inicial
   if (authLoading || eventLoading) {
