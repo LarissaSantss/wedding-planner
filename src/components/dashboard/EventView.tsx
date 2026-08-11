@@ -23,6 +23,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useEvent } from '../../hooks/useEvent'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { getThemeStyle } from '../../utils/theme'
+import { AuthScreen } from '../auth/AuthScreen'
 import { EventDashboard } from './EventDashboard'
 import { EventSettings } from './EventSettings'
 
@@ -81,9 +82,9 @@ export function EventView() {
     )
   }
 
-  // Usuário não autenticado — retorna vazio (login será tratado em outra etapa)
+  // Usuário não autenticado — exibe a tela de login/cadastro
   if (!user) {
-    return null
+    return <AuthScreen />
   }
 
   // Erro ao carregar eventos

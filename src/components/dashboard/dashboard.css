@@ -716,6 +716,123 @@ select.form-control {
   }
 }
 
+/* ========== AUTH SCREEN ========== */
+
+.auth-main {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.5rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: color-mix(in srgb, var(--theme-surface) 92%, var(--theme-primary) 4%);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-float);
+  padding: 2.25rem 2rem;
+}
+
+.auth-brand {
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.auth-brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-card);
+  background: var(--theme-primary);
+  color: #fff;
+  font-size: 1.5rem;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-primary) 35%, transparent);
+  margin-bottom: 1rem;
+}
+
+.auth-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.25rem;
+  color: var(--theme-text);
+}
+
+.auth-subtitle {
+  font-size: 0.875rem;
+  color: var(--theme-text-muted);
+  margin: 0;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.375rem;
+  background: color-mix(in srgb, var(--theme-primary) 8%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 0.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.auth-tab {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.auth-tab:hover {
+  color: var(--theme-text);
+}
+
+.auth-tab.is-active {
+  background: var(--theme-surface);
+  color: var(--theme-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.auth-tab:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+}
+
+.auth-error {
+  margin: 1rem 0 0;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #c0392b;
+  background: color-mix(in srgb, #c0392b 8%, transparent);
+  border: 1px solid color-mix(in srgb, #c0392b 30%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.auth-success {
+  margin: 1rem 0 0;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #1e7c48;
+  background: color-mix(in srgb, #1e7c48 8%, transparent);
+  border: 1px solid color-mix(in srgb, #1e7c48 30%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 1.5rem;
+}
+
 /* Responsividade */
 @media (max-width: 640px) {
   .dashboard-topbar {
