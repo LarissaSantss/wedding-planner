@@ -2,16 +2,14 @@
 // Importe tudo de um único lugar:
 // import { supabase, signIn, uploadFile } from '../lib/supabase'
 
-// Cliente
-export { supabase, supabaseAdmin } from './client'
+// Cliente público (frontend)
+// ⚠️ NOTA: supabaseAdmin (secret key) NÃO é exportado aqui.
+// Ele é usado apenas em Edge Functions / backend, fora do bundle do navegador.
+export { supabase } from './client'
 
-// Configuração
-export {
-  SUPABASE_URL,
-  SUPABASE_PUBLISHABLE_KEY,
-  SUPABASE_SECRET_KEY,
-  SUPABASE_JWKS_URL,
-} from '../../config/supabase'
+// Configuração pública (segura para o frontend)
+// ⚠️ A SUPABASE_SECRET_KEY não é exportada para não vazar no bundle.
+export { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JWKS_URL } from '../../config/supabase'
 
 // Autenticação
 export {
