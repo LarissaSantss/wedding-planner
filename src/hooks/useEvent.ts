@@ -57,7 +57,15 @@ export function useEvent(): UseEventReturn {
   }, [])
 
   useEffect(() => {
-    void refresh()
+    // Agendado via microtask para não chamar setState sincronamente no effect
+    // (regra react-hooks/set-state-in-effect do React 19)
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void refresh()
+    })
+    return () => {
+      cancelled = true
+    }
   }, [refresh])
 
   const selectEvent = useCallback(async (id: string) => {

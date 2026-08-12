@@ -871,4 +871,58 @@ select.form-control {
   .theme-grid {
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   }
+
+  .dashboard-controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .event-selector-native {
+    max-width: 180px;
+    font-size: 0.8rem;
+  }
+
+  .event-hero-countdown {
+    flex-wrap: wrap;
+  }
+
+  .event-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .module-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .auth-main {
+    padding: 1.25rem 1rem;
+  }
+
+  .auth-card {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .form-actions {
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .form-actions .btn-primary,
+  .form-actions .btn-secondary {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 400px) {
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .event-hero {
+    padding: 1.25rem 1rem;
+  }
+
+  .countdown-number {
+    font-size: 1.5rem;
+  }
 }
