@@ -1,4 +1,4 @@
-{/* 
+/* 
   ============================================================================
   DIRECTION CONTRACT — AUTH SCREEN (surface: AuthScreen, mode: Operate)
   ----------------------------------------------------------------------------
@@ -16,7 +16,7 @@
   FINISH: unreviewed and undocumented is unfinished; this build ends with the
   finish review, the verdict, and DESIGN.md.
   ============================================================================
-*/}
+*/
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { signIn, signUp, resendConfirmationEmail } from '../../lib/supabase/auth'
@@ -49,6 +49,19 @@ export function AuthScreen() {
     setMode(next)
     setError(null)
     setSuccess(null)
+  }
+
+  const handleResend = async () => {
+    if (!email.trim()) return
+    setResending(true)
+    const { error: resendError } = await resendConfirmationEmail(email.trim())
+    if (resendError) {
+      setError('Não foi possível reenviar o e-mail. Verifique se o email está correto e tente novamente.')
+    } else {
+      setError(null)
+      setSuccess('E-mail de confirmação reenviado. Verifique sua caixa de entrada (e o spam).')
+    }
+    setResending(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -192,17 +205,4 @@ export function AuthScreen() {
       </main>
     </div>
   )
-}
-
-const handleResend = async () => {
-  if (!email.trim()) return
-  setResending(true)
-  const { error: resendError } = await resendConfirmationEmail(email.trim())
-  if (resendError) {
-    setError('Não foi possível reenviar o e-mail. Verifique se o email está correto e tente novamente.')
-  } else {
-    setError(null)
-    setSuccess('E-mail de confirmação reenviado. Verifique sua caixa de entrada (e o spam).')
-  }
-  setResending(false)
 }
