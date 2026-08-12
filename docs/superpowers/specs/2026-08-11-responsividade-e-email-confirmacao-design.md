@@ -1,4 +1,4 @@
-# Design — Responsividade Global e E-mail de Confirmação
+# Design — Responsividade, E-mail de Confirmação e Funcionalidade do Site
 
 ## Contexto
 
@@ -7,6 +7,7 @@ O site Wedding & Events Planner funciona corretamente na tela de login, mas:
 1. **Não é responsivo** — o layout não ocupa a tela toda e quebra em celulares.
 2. **E-mail de confirmação** — o usuário quer entender como funciona o fluxo de confirmação de conta.
 3. **Ausência de tabelas no Supabase remoto** — o dashboard não tinha onde carregar eventos.
+4. **Site não funcional** — não há como criar um evento (nem escolher o tipo), e os módulos do dashboard são botões sem ação.
 
 ## Status de Execução (registro contínuo)
 
@@ -88,6 +89,33 @@ O envio de e-mail de confirmação é controlado no painel do Supabase remoto em
 **Ação manual (painel do Supabase remoto — fora do código):**
 - Para destravar imediatamente: no painel **Authentication → Users**, confirmar manualmente o usuário criado.
 - Para o fluxo em produção: desativar "Confirm email" em **Authentication → Sign In / Providers → Email** (login imediato, sem e-mail) **OU** configurar um provedor SMTP customizado (ex: Resend, SendGrid, Amazon SES) em **Settings → Auth → SMTP** para entrega confiável dos e-mails.
+
+### 3. Funcionalidade — criação de evento e módulos
+
+**Situação atual:** não existe fluxo de criação de evento. O estado vazio mostra "Nenhum evento criado" sem botão de ação, e os módulos do dashboard (Convidados, Fornecedores, Tarefas, Orçamento, Presentes) são botões sem `onClick`. O CRUD já existe em `src/lib/supabase/database.ts` (`createEvent`, `fetchUserEvents`, etc.).
+
+**Solução proposta:**
+
+**a) Fluxo de criação de evento (onboarding de primeiro acesso):**
+- No estado vazio ("Nenhum evento criado"), adicionar botão primário "Criar evento".
+- No dashboard, adicionar botão "Novo evento" na topbar (ao lado de Configurações).
+- Criar componente `EventCreate` (tela de criação) com:
+  - **Escolha do tipo de evento** (a opção que o usuário perguntou): Casamento 💍, 15 Anos 👑, Aniversário 🎂, Bodas 💞, Corporativo 🏢, Formatura 🎓, Outro ✨ — em grade de cards selecionáveis.
+  - Campo **Título do evento** (obrigatório).
+  - Campo **Nomes** (principal e secundário, opcional).
+  - Campo **Data** (opcional).
+  - Campo **Local** (opcional).
+  - **Tema visual** (opcional, default rose-gold).
+  - Botão "Criar evento" → chama `createEvent` → volta ao dashboard com o novo evento selecionado.
+- Integrar no `EventView`: novo estado de view `'create'`; após criar, chamar `refresh()` e selecionar o novo evento.
+
+**b) Módulos funcionais:**
+- Os 5 módulos (Convidados, Fornecedores, Tarefas, Orçamento, Presentes) hoje são botões sem ação.
+- **Escopo desta etapa:** tornar os módulos navegáveis com telas de listagem básicas (CRUD de leitura + criação) para cada um, usando as funções já existentes em `database.ts` (`fetchGuestsByEvent`, `createGuest`, etc.).
+- Cada módulo abre uma tela com: lista de itens do evento + formulário simples de adição + botão de remover.
+- **Prioridade:** começar por Convidados (guests) como módulo piloto; os demais seguem o mesmo padrão.
+
+**c) Responsividade aplicada a todas as novas telas** (criação e módulos) usando os mesmos tokens `--theme-*` e media queries.
 
 ## Critérios de Aceite
 
