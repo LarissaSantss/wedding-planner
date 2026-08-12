@@ -24,6 +24,7 @@ interface EventDashboardProps {
   onSelectEvent: (id: string) => void
   onOpenSettings: () => void
   onOpenGuests: () => void
+  onOpenTasks: () => void
   onSaveEvent: (values: EventUpdate) => Promise<void>
 }
 
@@ -59,6 +60,7 @@ export function EventDashboard({
   onSelectEvent,
   onOpenSettings,
   onOpenGuests,
+  onOpenTasks,
   onSaveEvent,
 }: EventDashboardProps) {
   const themeStyle = useMemo<CSSProperties>(
@@ -133,6 +135,7 @@ export function EventDashboard({
 
   const handleNav = (id: (typeof SIDEBAR_NAV)[number]['id']) => {
     if (id === 'guests') void onOpenGuests()
+    else if (id === 'tasks') void onOpenTasks()
     else if (id === 'settings') void onOpenSettings()
   }
 
@@ -196,7 +199,11 @@ export function EventDashboard({
 
           <nav className="sidebar-nav">
             {SIDEBAR_NAV.map((item) => {
-              const isEnabled = item.id === 'dashboard' || item.id === 'guests' || item.id === 'settings'
+              const isEnabled =
+                item.id === 'dashboard' ||
+                item.id === 'guests' ||
+                item.id === 'tasks' ||
+                item.id === 'settings'
               return (
                 <button
                   key={item.id}
@@ -374,7 +381,13 @@ export function EventDashboard({
                     type="button"
                     className="module-card"
                     aria-label={`Abrir módulo ${module.title}`}
-                    onClick={module.id === 'guests' ? () => void onOpenGuests() : undefined}
+                    onClick={
+                      module.id === 'guests'
+                        ? () => void onOpenGuests()
+                        : module.id === 'tasks'
+                          ? () => void onOpenTasks()
+                          : undefined
+                    }
                   >
                     <span className="module-card-icon" aria-hidden="true">
                       {module.icon}

@@ -1,5 +1,6 @@
 import { supabase } from './client'
 import type {
+  Profile,
   Event,
   EventInsert,
   EventUpdate,
@@ -20,6 +21,12 @@ import type {
   VendorInsert,
   Task,
   TaskInsert,
+  Board,
+  BoardInsert,
+  BoardColumn,
+  BoardColumnInsert,
+  TaskCategory,
+  TaskCategoryInsert,
   Expense,
   ExpenseInsert,
   GiftRegistryItem,
@@ -368,9 +375,52 @@ export async function fetchTasksByEvent(
 
 /**
  * Cria uma nova tarefa para um evento.
+ * Injeta `created_by` da sessão. Só `title` + `event_id` são obrigatórios.
  */
 export async function createTask(values: TaskInsert): Promise<QueryResult<Task>> {
-  return insertRecord<Task>('tasks', values as Record<string, unknown>)
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id ?? null
+  return insertRecord<Task>('tasks', {
+    ...values,
+    created_by: userId,
+  } as Record<string, unknown>)
+}
+
+/**
+ * Cria várias tarefas de uma vez (um título por linha).
+ * Cada tarefa recebe board_id/column_id opcionais e `created_by` da sessão.
+ */
+export async function createTasks(
+  eventId: string,
+  titles: string[],
+  context?: { board_id?: string | null; column_id?: string | null },
+): Promise<QueryListResult<Task>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id ?? null
+
+  const rows = titles.map((title) => ({
+    event_id: eventId,
+    title: title.trim(),
+    board_id: context?.board_id ?? null,
+    column_id: context?.column_id ?? null,
+    created_by: userId,
+  }))
+
+  const { data, error } = await supabase.from('tasks').insert(rows).select()
+
+  return { data: data as Task[] | null, error }
+}
+
+/**
+ * Busca perfis por IDs (para exibir quem criou cada tarefa).
+ */
+export async function fetchProfiles(ids: string[]): Promise<QueryListResult<Profile>> {
+  const unique = [...new Set(ids.filter(Boolean))]
+  if (unique.length === 0) {
+    return { data: [], error: null }
+  }
+  const { data, error } = await supabase.from('profiles').select('*').in('id', unique)
+  return { data: data as Profile[] | null, error }
 }
 
 /**
@@ -388,6 +438,126 @@ export async function updateTask(
  */
 export async function deleteTask(id: string): Promise<{ error: Error | null }> {
   return deleteRecord('tasks', id)
+}
+
+/**
+ * Move uma tarefa para outra coluna/posição.
+ * `position` é a ordem (1-based) dentro da coluna de destino.
+ */
+export async function moveTask(
+  id: string,
+  input: { column_id: string | null; position: number },
+): Promise<QueryResult<Task>> {
+  return updateRecord<Task>('tasks', id, {
+    column_id: input.column_id,
+    position: input.position,
+  } as Record<string, unknown>)
+}
+
+/**
+ * Persiste a nova ordem de várias tarefas (upsert por id).
+ * Cada item define id, column_id e position.
+ */
+export async function updateTaskPositions(
+  updates: Array<{ id: string; column_id: string | null; position: number }>,
+): Promise<{ error: Error | null }> {
+  const { error } = await supabase.from('tasks').upsert(
+    updates.map((u) => ({
+      id: u.id,
+      column_id: u.column_id,
+      position: u.position,
+    })),
+  )
+  return { error }
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: KANBAN (BOARDS / COLUNAS) ==========
+
+/** Busca os quadros de um evento. */
+export async function fetchBoardsByEvent(
+  eventId: string,
+): Promise<QueryListResult<Board>> {
+  return fetchWithFilter<Board>('boards', { event_id: eventId }, {
+    orderBy: { column: 'sort_order', ascending: true },
+  })
+}
+
+/** Cria um quadro. */
+export async function createBoard(values: BoardInsert): Promise<QueryResult<Board>> {
+  return insertRecord<Board>('boards', values as Record<string, unknown>)
+}
+
+/** Atualiza um quadro. */
+export async function updateBoard(
+  id: string,
+  values: Partial<Board>,
+): Promise<QueryResult<Board>> {
+  return updateRecord<Board>('boards', id, values as Record<string, unknown>)
+}
+
+/** Remove um quadro (cascade remove colunas; tarefas ficam órfãs via SET NULL). */
+export async function deleteBoard(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('boards', id)
+}
+
+/** Busca as colunas de um quadro. */
+export async function fetchColumnsByBoard(
+  boardId: string,
+): Promise<QueryListResult<BoardColumn>> {
+  return fetchWithFilter<BoardColumn>('board_columns', { board_id: boardId }, {
+    orderBy: { column: 'sort_order', ascending: true },
+  })
+}
+
+/** Cria uma coluna. */
+export async function createColumn(
+  values: BoardColumnInsert,
+): Promise<QueryResult<BoardColumn>> {
+  return insertRecord<BoardColumn>('board_columns', values as Record<string, unknown>)
+}
+
+/** Atualiza uma coluna. */
+export async function updateColumn(
+  id: string,
+  values: Partial<BoardColumn>,
+): Promise<QueryResult<BoardColumn>> {
+  return updateRecord<BoardColumn>('board_columns', id, values as Record<string, unknown>)
+}
+
+/** Remove uma coluna (tarefas viram órfãs via SET NULL). */
+export async function deleteColumn(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('board_columns', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: CATEGORIAS ==========
+
+/** Busca as categorias de um evento. */
+export async function fetchCategoriesByEvent(
+  eventId: string,
+): Promise<QueryListResult<TaskCategory>> {
+  return fetchWithFilter<TaskCategory>('task_categories', { event_id: eventId }, {
+    orderBy: { column: 'sort_order', ascending: true },
+  })
+}
+
+/** Cria uma categoria. */
+export async function createCategory(
+  values: TaskCategoryInsert,
+): Promise<QueryResult<TaskCategory>> {
+  return insertRecord<TaskCategory>('task_categories', values as Record<string, unknown>)
+}
+
+/** Atualiza uma categoria. */
+export async function updateCategory(
+  id: string,
+  values: Partial<TaskCategory>,
+): Promise<QueryResult<TaskCategory>> {
+  return updateRecord<TaskCategory>('task_categories', id, values as Record<string, unknown>)
+}
+
+/** Remove uma categoria. */
+export async function deleteCategory(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('task_categories', id)
 }
 
 // ========== OPERAÇÕES ESPECÍFICAS: EXPENSES ==========

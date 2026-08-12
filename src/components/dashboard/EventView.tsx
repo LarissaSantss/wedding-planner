@@ -16,8 +16,9 @@ import { EventSettings } from './EventSettings'
 import { EventCreate } from './EventCreate'
 import { EventJoin } from './EventJoin'
 import { GuestList } from './GuestList'
+import { Kanban } from './Kanban'
 
-type View = 'empty' | 'create' | 'join' | 'dashboard' | 'settings' | 'guests'
+type View = 'empty' | 'create' | 'join' | 'dashboard' | 'settings' | 'guests' | 'tasks'
 
 const DEFAULT_THEME_STYLE = getThemeStyle('rose-gold') as CSSProperties
 
@@ -175,6 +176,10 @@ export function EventView() {
     return <GuestList event={event} onBack={() => setView('dashboard')} />
   }
 
+  if (view === 'tasks') {
+    return <Kanban event={event} onBack={() => setView('dashboard')} />
+  }
+
   return (
     <EventDashboard
       event={event}
@@ -182,6 +187,7 @@ export function EventView() {
       onSelectEvent={handleSelectEvent}
       onOpenSettings={() => setView('settings')}
       onOpenGuests={() => setView('guests')}
+      onOpenTasks={() => setView('tasks')}
       onSaveEvent={handleSaveEvent}
     />
   )

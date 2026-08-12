@@ -33,6 +33,20 @@ export type VendorStatus = 'pending' | 'contracted' | 'cancelled'
 /** Prioridade de uma tarefa */
 export type TaskPriority = 'low' | 'medium' | 'high'
 
+/** Chaves da paleta pastel do Kanban (centralizadas — hex não espalhado) */
+export type PastelColorKey =
+  | 'rose'
+  | 'lavender'
+  | 'sage'
+  | 'blue'
+  | 'peach'
+  | 'vanilla'
+  | 'beige'
+  | 'gray'
+
+/** Papel de um responsável numa tarefa */
+export type TaskAssigneeRole = 'primary' | 'collaborator'
+
 /** Papel do usuário na plataforma */
 export type UserRole = 'user' | 'admin'
 
@@ -230,7 +244,106 @@ export interface Task {
   completed: boolean
   priority: TaskPriority
   category: string | null
-  assigned_to: string | null
+  assigned_to: string | null // legado — atribuição agora em task_assignees
+  board_id: string | null
+  column_id: string | null
+  category_id: string | null
+  position: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Quadro Kanban
+export interface Board {
+  id: string
+  event_id: string
+  name: string
+  description: string | null
+  color_key: PastelColorKey
+  sort_order: number
+  is_primary: boolean
+  is_archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Coluna do quadro
+export interface BoardColumn {
+  id: string
+  board_id: string
+  name: string
+  description: string | null
+  color_key: PastelColorKey
+  sort_order: number
+  is_initial: boolean
+  is_completion: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Categoria de tarefas por evento
+export interface TaskCategory {
+  id: string
+  event_id: string
+  name: string
+  icon_key: string
+  color_key: PastelColorKey
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+// Responsável de uma tarefa
+export interface TaskAssignee {
+  id: string
+  task_id: string
+  user_id: string
+  role: TaskAssigneeRole
+  created_at: string
+}
+
+// Subtarefa
+export interface TaskSubtask {
+  id: string
+  task_id: string
+  title: string
+  completed: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+// Comentário de tarefa (com menções)
+export interface TaskComment {
+  id: string
+  task_id: string
+  user_id: string
+  content: string
+  mentions: string[]
+  created_at: string
+  updated_at: string
+}
+
+// Anexo de tarefa (arquivo fica no Storage)
+export interface TaskAttachment {
+  id: string
+  task_id: string
+  filename: string
+  storage_path: string
+  content_type: string | null
+  size_bytes: number | null
+  created_by: string | null
+  created_at: string
+}
+
+// Histórico de atividade
+export interface TaskActivity {
+  id: string
+  task_id: string
+  user_id: string | null
+  action: string
+  metadata: Record<string, unknown>
   created_at: string
 }
 
@@ -303,8 +416,40 @@ export type GuestVoteInsert = Pick<GuestVote, 'guest_id' | 'vote'>
 /** Dados para criação de um fornecedor */
 export type VendorInsert = Pick<Vendor, 'name' | 'event_id'> & Partial<Omit<Vendor, 'id' | 'created_at'>>
 
-/** Dados para criação de uma tarefa */
-export type TaskInsert = Pick<Task, 'title' | 'event_id'> & Partial<Omit<Task, 'id' | 'created_at'>>
+/** Dados para criação de uma tarefa (só title + event_id obrigatórios) */
+export type TaskInsert = Pick<Task, 'title' | 'event_id'> &
+  Partial<Omit<Task, 'id' | 'created_at' | 'updated_at' | 'created_by'>>
+
+/** Dados para atualização de uma tarefa */
+export type TaskUpdate = Partial<Omit<Task, 'id' | 'event_id' | 'created_at' | 'updated_at' | 'created_by'>>
+
+/** Dados para criação de um quadro */
+export type BoardInsert = Pick<Board, 'name' | 'event_id'> &
+  Partial<Omit<Board, 'id' | 'created_at' | 'updated_at'>>
+
+/** Dados para criação de coluna */
+export type BoardColumnInsert = Pick<BoardColumn, 'name' | 'board_id'> &
+  Partial<Omit<BoardColumn, 'id' | 'created_at' | 'updated_at'>>
+
+/** Dados para criação de categoria */
+export type TaskCategoryInsert = Pick<TaskCategory, 'name' | 'event_id'> &
+  Partial<Omit<TaskCategory, 'id' | 'created_at' | 'updated_at'>>
+
+/** Dados para criação de responsável */
+export type TaskAssigneeInsert = Pick<TaskAssignee, 'task_id' | 'user_id'> &
+  Partial<Omit<TaskAssignee, 'id' | 'created_at'>>
+
+/** Dados para criação de subtarefa */
+export type TaskSubtaskInsert = Pick<TaskSubtask, 'task_id' | 'title'> &
+  Partial<Omit<TaskSubtask, 'id' | 'created_at' | 'updated_at'>>
+
+/** Dados para criação de comentário */
+export type TaskCommentInsert = Pick<TaskComment, 'task_id' | 'content'> &
+  Partial<Pick<TaskComment, 'mentions'>>
+
+/** Dados para criação de anexo */
+export type TaskAttachmentInsert = Pick<TaskAttachment, 'task_id' | 'filename' | 'storage_path'> &
+  Partial<Omit<TaskAttachment, 'id' | 'created_at'>>
 
 /** Dados para criação de uma despesa */
 export type ExpenseInsert = Pick<Expense, 'description' | 'amount' | 'event_id'> &
@@ -368,6 +513,46 @@ export interface Database {
         Row: Task
         Insert: TaskInsert
         Update: Partial<Task>
+      }
+      boards: {
+        Row: Board
+        Insert: BoardInsert
+        Update: Partial<Board>
+      }
+      board_columns: {
+        Row: BoardColumn
+        Insert: BoardColumnInsert
+        Update: Partial<BoardColumn>
+      }
+      task_categories: {
+        Row: TaskCategory
+        Insert: TaskCategoryInsert
+        Update: Partial<TaskCategory>
+      }
+      task_assignees: {
+        Row: TaskAssignee
+        Insert: TaskAssigneeInsert
+        Update: Partial<TaskAssignee>
+      }
+      task_subtasks: {
+        Row: TaskSubtask
+        Insert: TaskSubtaskInsert
+        Update: Partial<TaskSubtask>
+      }
+      task_comments: {
+        Row: TaskComment
+        Insert: TaskCommentInsert
+        Update: Partial<TaskComment>
+      }
+      task_attachments: {
+        Row: TaskAttachment
+        Insert: TaskAttachmentInsert
+        Update: Partial<TaskAttachment>
+      }
+      task_activity: {
+        Row: TaskActivity
+        Insert: Partial<TaskActivity>
+        Update: Partial<TaskActivity>
       }
       expenses: {
         Row: Expense
