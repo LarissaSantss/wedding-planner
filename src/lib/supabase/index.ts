@@ -15,6 +15,7 @@ export { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_JWKS_URL } from '../..
 export {
   signUp,
   signIn,
+  resendConfirmationEmail,
   signInWithProvider,
   signInWithMagicLink,
   signOut,

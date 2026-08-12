@@ -15,6 +15,17 @@ export async function signUp(email: string, password: string) {
 }
 
 /**
+ * Reenvia o e-mail de confirmação de cadastro
+ */
+export async function resendConfirmationEmail(email: string) {
+  const { data, error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+  })
+  return { data, error }
+}
+
+/**
  * Realiza login com email e senha
  */
 export async function signIn(email: string, password: string) {
