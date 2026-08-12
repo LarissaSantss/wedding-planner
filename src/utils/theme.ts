@@ -2,8 +2,9 @@ import type { CSSProperties } from 'react'
 import type { ThemePreset } from '../lib/supabase/types'
 
 /**
- * Paleta de cores por preset de tema.
- * Cada tema define cores primária, secundária, destaque e superfícies.
+ * Paleta de cores completa aplicada ao redor do evento.
+ * Para presets fixos retorna a mão exata do designer; para `custom`,
+ * deriva toda a paleta a partir de três cores escolhidas pelo usuário.
  */
 export interface ThemePalette {
   preset: ThemePreset
@@ -30,7 +31,10 @@ export interface ThemePalette {
   progress: string
 }
 
-export const THEME_PRESETS: Record<ThemePreset, ThemePalette> = {
+/** Presets fixos (exclui o tema 'custom', que é gerado em tempo de execução). */
+export type ThemePresetName = Exclude<ThemePreset, 'custom'>
+
+export const THEME_PRESETS: Record<ThemePresetName, ThemePalette> = {
   'rose-gold': {
     preset: 'rose-gold',
     label: 'Rose Gold',
@@ -117,28 +121,111 @@ export const THEME_PRESETS: Record<ThemePreset, ThemePalette> = {
   },
 }
 
-export const THEME_PRESET_LIST: ThemePreset[] = Object.keys(
+export const THEME_PRESET_LIST: ThemePresetName[] = Object.keys(
   THEME_PRESETS,
-) as ThemePreset[]
+) as ThemePresetName[]
 
-/**
- * Retorna a paleta de cores completa para um preset de tema.
- * Fallback seguro para 'rose-gold' se o preset for inválido.
- */
-export function getThemePalette(preset: ThemePreset | null | undefined): ThemePalette {
+/* ============================================================
+ * CORES CUSTOMIZADAS
+ * ============================================================ */
+
+function clampChannel(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)))
+}
+
+/** Converte um HEX (ex: #B76E79) em canal RGB. */
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const cleaned = hex.replace('#', '').trim()
+  const full =
+    cleaned.length === 3
+      ? cleaned
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : cleaned
+  const num = Number.parseInt(full.slice(0, 6).padEnd(6, '0'), 16)
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  }
+}
+
+function mixChannel(a: number, b: number, t: number): number {
+  return clampChannel(a + (b - a) * t)
+}
+
+/** Mistura duas cores HEX com peso `t` (0 → corA, 1 → corB). */
+function mixHex(colorA: string, colorB: string, t: number): string {
+  const a = hexToRgb(colorA)
+  const b = hexToRgb(colorB)
+  const r = mixChannel(a.r, b.r, t)
+  const g = mixChannel(a.g, b.g, t)
+  const bl = mixChannel(a.b, b.b, t)
+  return `rgb(${r}, ${g}, ${bl})`
+}
+
+/** Clareia uma cor HEX em direção ao branco (`t` define a intensidade). */
+function lighten(hex: string, t: number): string {
+  return mixHex(hex, '#FFFFFF', t)
+}
+
+/** Escurece uma cor HEX em direção ao preto. */
+function darken(hex: string, t: number): string {
+  return mixHex(hex, '#000000', t)
+}
+
+/** Gera a paleta completa para um tema personalizado a partir de 3 cores. */
+export function buildCustomPalette(props: {
+  primary: string
+  secondary: string
+  accent: string
+}): ThemePalette {
+  const primary = props.primary.trim() || '#B76E79'
+  const secondary = props.secondary.trim() || '#E8C4C4'
+  const accent = props.accent.trim() || '#D4AF37'
+
+  return {
+    preset: 'custom',
+    label: 'Personalizado',
+    primary,
+    primaryHover: darken(primary, 0.16),
+    secondary,
+    accent,
+    surface: lighten(primary, 0.96),
+    text: darken(primary, 0.72),
+    textMuted: darken(primary, 0.42),
+    border: lighten(primary, 0.86),
+    gradient: `linear-gradient(135deg, ${primary} 0%, ${secondary} 55%, ${accent} 100%)`,
+    progress: primary,
+  }
+}
+
+/** Obtém a paleta de um tema (preset fixo ou customizado em runtime). */
+export function getThemePalette(
+  preset: ThemePreset | null | undefined,
+  custom?: { primary: string | null; secondary: string | null; accent: string | null },
+): ThemePalette {
+  if (preset === 'custom') {
+    return buildCustomPalette({
+      primary: custom?.primary ?? '#B76E79',
+      secondary: custom?.secondary ?? '#E8C4C4',
+      accent: custom?.accent ?? '#D4AF37',
+    })
+  }
   if (!preset) return THEME_PRESETS['rose-gold']
-  return THEME_PRESETS[preset] ?? THEME_PRESETS['rose-gold']
+  return THEME_PRESETS[preset as ThemePresetName] ?? THEME_PRESETS['rose-gold']
 }
 
 /**
  * Gera o objeto `style` para aplicar cores CSS dinâmicas em um elemento.
- *
- * Uso:
- *   const theme = useEventTheme(event.theme_preset)
- *   <div style={theme.style}>...</div>
+ * Aceita um tema customizado opcional (usado quando o preset é 'custom').
  */
-export function getThemeStyle(preset: ThemePreset | null | undefined) {
-  const palette = getThemePalette(preset)
+export function getThemeStyle(
+  preset: ThemePreset | null | undefined,
+  custom?: { primary: string | null; secondary: string | null; accent: string | null },
+): CSSProperties {
+  const palette = getThemePalette(preset, custom)
 
   return {
     '--theme-primary': palette.primary,

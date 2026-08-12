@@ -1,76 +1,85 @@
-{/* 
-  ============================================================================
-  DIRECTION CONTRACT — EVENT VIEW (surface: EventView, mode: Operate)
-  ----------------------------------------------------------------------------
-  THESIS: Orquestrador das duas superfícies do evento — conecta o usuário
+/*
+  DIRECTION CONTRACT - EVENT VIEW (surface: EventView, mode: Operate)
+  THESIS: Orquestrador das duas superficies do evento - conecta o usuario
   autenticado ao Supabase via useEvent, alterna entre Dashboard e Settings,
-  e aplica o tema do evento ao redor de ambas. Rejeita roteamento complexo
-  para duas telas acopladas.
-  OWN-WORLD: Mesmo sistema de tokens `--theme-*`; estados de loading, erro e
-  vazio consistentes com o craft floor (spinner, mensagem de erro, empty state).
-  STORY: Usuário logado chega ao evento mais recente; navega para
-  configurações e volta; tema se mantém coerente em toda a navegação.
-  FIRST VIEWPORT: Verifica autenticação → carrega eventos → exibe Dashboard
-  ou registro adequado (empty/error).
-  FORM: Extensão de superfície dentro do mundo estabelecido; seleção direta.
-  FINISH: unreviewed and undocumented is unfinished; this build ends with the
-  finish review, the verdict, and DESIGN.md.
-  ============================================================================
-*/}
-import { useState } from 'react'
+  e aplica o tema do evento ao redor de ambas.
+*/
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useEvent } from '../../hooks/useEvent'
 import { getThemeStyle } from '../../utils/theme'
 import { AuthScreen } from '../auth/AuthScreen'
+import type { EventUpdate } from '../../lib/supabase/types'
 import { EventDashboard } from './EventDashboard'
 import { EventSettings } from './EventSettings'
+import { EventCreate } from './EventCreate'
+import { EventJoin } from './EventJoin'
+import { GuestList } from './GuestList'
 
-type View = 'dashboard' | 'settings'
+type View = 'empty' | 'create' | 'join' | 'dashboard' | 'settings' | 'guests'
 
-/** Tema padrão aplicado aos estados de loading/erro/vazio (sem evento carregado) */
 const DEFAULT_THEME_STYLE = getThemeStyle('rose-gold') as CSSProperties
 
-/**
- * Componente orquestrador do dashboard do evento.
- *
- * - Protege o acesso: exige sessão autenticada
- * - Carrega eventos do usuário logado via `useEvent` (Supabase + RLS)
- * - Alterna entre EventDashboard e EventSettings
- *
- * Uso:
- *   <EventView />
- */
 export function EventView() {
   const { user, loading: authLoading } = useAuth()
   const { event, events, loading: eventLoading, error, refresh, selectEvent, saveEvent } =
     useEvent()
-  const [view, setView] = useState<View>('dashboard')
 
-  // Aguarda autenticação e carregamento inicial
+  // Código de convite vindo da URL (?code=XXXX), lido uma única vez
+  const [initialJoinCode] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('code')?.trim() ?? ''
+  })
+  const [view, setView] = useState<View>(() => (initialJoinCode ? 'join' : 'empty'))
+
+  // Remove o código da URL após a leitura (não altera estado React)
+  useEffect(() => {
+    if (!initialJoinCode) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('code')
+    window.history.replaceState(null, '', url.toString())
+  }, [initialJoinCode])
+
+  const handleRefresh = () => {
+    void refresh()
+  }
+
+  const handleCreateEvent = () => {
+    setView('create')
+  }
+
+  const handleEnterCode = () => {
+    setView('join')
+  }
+
+  const handleJoined = async (eventId: string) => {
+    await refresh()
+    await selectEvent(eventId)
+    setView('dashboard')
+  }
+
   if (authLoading || eventLoading) {
     return (
       <div className="dashboard-shell" style={DEFAULT_THEME_STYLE}>
         <div className="state-panel">
           <div className="state-spinner" role="status" aria-label="Carregando" />
-          <p className="state-message">Carregando suas informações...</p>
+          <p className="state-message">Carregando suas informacoes...</p>
         </div>
       </div>
     )
   }
 
-  // Usuário não autenticado — exibe a tela de login/cadastro
   if (!user) {
     return <AuthScreen />
   }
 
-  // Erro ao carregar eventos
   if (error) {
     return (
       <div className="dashboard-shell" style={DEFAULT_THEME_STYLE}>
         <div className="state-panel">
-          <p className="state-message state-error">⚠ {error}</p>
-          <button type="button" className="btn-primary" onClick={() => void refresh()} style={{ marginTop: '1.25rem' }}>
+          <p className="state-message state-error">Erro: {error}</p>
+          <button type="button" className="btn-primary" onClick={handleRefresh}>
             Tentar novamente
           </button>
         </div>
@@ -78,18 +87,49 @@ export function EventView() {
     )
   }
 
-  // Sem eventos cadastrados
   if (!event) {
+    if (view === 'create') {
+      return (
+        <EventCreate
+          theme="rose-gold"
+          onCreated={() => {
+            void refresh()
+            setView('dashboard')
+          }}
+          onCancel={() => setView('empty')}
+        />
+      )
+    }
+
+    if (view === 'join') {
+      return (
+        <EventJoin
+          theme="rose-gold"
+          initialCode={initialJoinCode}
+          onJoined={(id) => {
+            void handleJoined(id)
+          }}
+          onBack={() => setView('empty')}
+        />
+      )
+    }
+
     return (
       <div className="dashboard-shell" style={DEFAULT_THEME_STYLE}>
         <div className="empty-state">
-          <span className="empty-state-icon" aria-hidden="true">
-            ✨
-          </span>
+          <span className="empty-state-icon" aria-hidden="true">✨</span>
           <h1 className="empty-state-title">Nenhum evento criado</h1>
           <p className="empty-state-text">
-            Crie seu primeiro evento para começar a planejar convidados, fornecedores, tarefas e orçamento.
+            Crie seu primeiro evento para comecar a planejar convidados, fornecedores, tarefas e orcamento.
           </p>
+          <div className="empty-state-actions">
+            <button type="button" className="btn-primary" onClick={handleCreateEvent}>
+              Criar novo evento
+            </button>
+            <button type="button" className="btn-secondary" onClick={handleEnterCode}>
+              Entrar com codigo do evento
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -104,6 +144,23 @@ export function EventView() {
     return saveEvent(id, values)
   }
 
+  const handleSaveEvent = async (values: EventUpdate) => {
+    await saveEvent(event.id, values)
+  }
+
+  if (view === 'join') {
+    return (
+      <EventJoin
+        theme={event.theme_preset}
+        initialCode={initialJoinCode}
+        onJoined={(id) => {
+          void handleJoined(id)
+        }}
+        onBack={() => setView('dashboard')}
+      />
+    )
+  }
+
   if (view === 'settings') {
     return (
       <EventSettings
@@ -114,12 +171,18 @@ export function EventView() {
     )
   }
 
+  if (view === 'guests') {
+    return <GuestList event={event} onBack={() => setView('dashboard')} />
+  }
+
   return (
     <EventDashboard
       event={event}
       events={events}
       onSelectEvent={handleSelectEvent}
       onOpenSettings={() => setView('settings')}
+      onOpenGuests={() => setView('guests')}
+      onSaveEvent={handleSaveEvent}
     />
   )
 }

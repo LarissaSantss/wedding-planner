@@ -38,6 +38,8 @@ import {
   EVENT_TYPE_ICONS,
   EVENT_STATUS_LABELS,
 } from '../../utils/eventFormat'
+import { MemberPermissionsPanel } from './MemberPermissionsPanel'
+import { useAuth } from '../../hooks/useAuth'
 
 interface EventSettingsProps {
   event: Event
@@ -72,6 +74,9 @@ const EVENT_STATUS_OPTIONS = Object.keys(EVENT_STATUS_LABELS) as EventStatus[]
  *   <EventSettings event={event} onSave={saveEvent} onBack={() => setView('dashboard')} />
  */
 export function EventSettings({ event, onSave, onBack }: EventSettingsProps) {
+  const { user } = useAuth()
+  const isOwner = user?.id === event.user_id
+
   const [form, setForm] = useState<FormState>(() => ({
     title: event.title,
     event_type: event.event_type,
@@ -88,13 +93,46 @@ export function EventSettings({ event, onSave, onBack }: EventSettingsProps) {
     description: event.description ?? '',
   }))
   const [selectedTheme, setSelectedTheme] = useState<ThemePreset>(event.theme_preset)
+  const [customPrimary, setCustomPrimary] = useState(event.custom_primary ?? '#B76E79')
+  const [customSecondary, setCustomSecondary] = useState(event.custom_secondary ?? '#E8C4C4')
+  const [customAccent, setCustomAccent] = useState(event.custom_accent ?? '#D4AF37')
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null)
+
+  const copyText = async (text: string, kind: 'code' | 'link') => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(kind)
+      window.setTimeout(() => setCopied(null), 2000)
+    } catch {
+      setCopied(null)
+    }
+  }
+
+  const handleCopyCode = () => {
+    void copyText(event.code, 'code')
+  }
+
+  const handleCopyLink = () => {
+    const link = `${window.location.origin}${window.location.pathname}?code=${event.code}`
+    void copyText(link, 'link')
+  }
 
   // Aplica o tema selecionado em tempo real (pré-visualização)
   const themeStyle = useMemo<CSSProperties>(
-    () => getThemeStyle(selectedTheme),
-    [selectedTheme],
+    () =>
+      getThemeStyle(
+        selectedTheme,
+        selectedTheme === 'custom'
+          ? {
+              primary: customPrimary,
+              secondary: customSecondary,
+              accent: customAccent,
+            }
+          : undefined,
+      ),
+    [selectedTheme, customPrimary, customSecondary, customAccent],
   )
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -118,6 +156,9 @@ export function EventSettings({ event, onSave, onBack }: EventSettingsProps) {
       guest_count: form.guest_count ? Number(form.guest_count) : null,
       description: form.description.trim() || null,
       theme_preset: selectedTheme,
+      custom_primary: selectedTheme === 'custom' ? customPrimary : null,
+      custom_secondary: selectedTheme === 'custom' ? customSecondary : null,
+      custom_accent: selectedTheme === 'custom' ? customAccent : null,
     }
 
     const { error } = await onSave(event.id, values)
@@ -364,6 +405,123 @@ export function EventSettings({ event, onSave, onBack }: EventSettingsProps) {
                   </button>
                 )
               })}
+
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selectedTheme === 'custom'}
+                className={`theme-option${selectedTheme === 'custom' ? ' is-selected' : ''}`}
+                onClick={() => setSelectedTheme('custom')}
+              >
+                <span
+                  className="theme-swatch"
+                  style={{
+                    background: `linear-gradient(135deg, ${customPrimary} 0%, ${customSecondary} 55%, ${customAccent} 100%)`,
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="theme-option-label">Personalizado</span>
+              </button>
+            </div>
+
+            {selectedTheme === 'custom' && (
+              <>
+              <p className="color-picker-hint" style={{ marginTop: '0.75rem' }}>
+                Clique no quadrado colorido para abrir o seletor de cores.
+              </p>
+              <div className="color-picker-grid">
+                <div className="form-field">
+                  <label className="form-label" htmlFor="settings-custom-primary">
+                    Cor primária
+                  </label>
+                  <div className="color-picker-row">
+                    <input
+                      id="settings-custom-primary"
+                      className="color-input"
+                      type="color"
+                      value={customPrimary}
+                      onChange={(e) => setCustomPrimary(e.target.value)}
+                    />
+                    <input
+                      className="form-control"
+                      type="text"
+                      value={customPrimary}
+                      onChange={(e) => setCustomPrimary(e.target.value)}
+                      maxLength={7}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label" htmlFor="settings-custom-secondary">
+                    Cor secundária
+                  </label>
+                  <div className="color-picker-row">
+                    <input
+                      id="settings-custom-secondary"
+                      className="color-input"
+                      type="color"
+                      value={customSecondary}
+                      onChange={(e) => setCustomSecondary(e.target.value)}
+                    />
+                    <input
+                      className="form-control"
+                      type="text"
+                      value={customSecondary}
+                      onChange={(e) => setCustomSecondary(e.target.value)}
+                      maxLength={7}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label" htmlFor="settings-custom-accent">
+                    Cor de destaque
+                  </label>
+                  <div className="color-picker-row">
+                    <input
+                      id="settings-custom-accent"
+                      className="color-input"
+                      type="color"
+                      value={customAccent}
+                      onChange={(e) => setCustomAccent(e.target.value)}
+                    />
+                    <input
+                      className="form-control"
+                      type="text"
+                      value={customAccent}
+                      onChange={(e) => setCustomAccent(e.target.value)}
+                      maxLength={7}
+                    />
+                  </div>
+                </div>
+              </div>
+              </>
+            )}
+          </section>
+
+          {/* Permissões dos membros (somente owner) */}
+          {isOwner && <MemberPermissionsPanel event={event} />}
+
+          {/* Compartilhamento: código de acesso e link de convite */}
+          <section className="settings-section share-section" aria-labelledby="settings-share-title">
+            <h2 id="settings-share-title" className="settings-section-title">
+              Compartilhar evento
+            </h2>
+            <p className="settings-section-desc">
+              Envie o código ou o link de convite para outras pessoas acessarem este evento.
+            </p>
+
+            <div className="share-code-row">
+              <span className="share-code-value" aria-label="Código de acesso do evento">
+                {event.code}
+              </span>
+              <button type="button" className="btn-secondary" onClick={handleCopyCode}>
+                {copied === 'code' ? '✓ Copiado!' : 'Copiar código'}
+              </button>
+              <button type="button" className="btn-primary" onClick={handleCopyLink}>
+                {copied === 'link' ? '✓ Link copiado!' : 'Copiar link de convite'}
+              </button>
             </div>
           </section>
         </div>

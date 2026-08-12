@@ -105,3 +105,28 @@ export async function copyFile(bucketName: string, fromPath: string, toPath: str
     .copy(fromPath, toPath)
   return { data, error }
 }
+
+/**
+ * Faz upload da foto de capa/perfil de um evento para o bucket público
+ * `wedding-photos` e retorna a URL pública.
+ *
+ * Uso:
+ *   const { url, error } = await uploadEventCover(eventId, file)
+ */
+export async function uploadEventCover(
+  eventId: string,
+  file: File | Blob,
+): Promise<{ url: string | null; error: Error | null }> {
+  const ext = file instanceof File && file.name.includes('.')
+    ? file.name.split('.').pop()
+    : 'jpg'
+  const path = `${eventId}/cover.${ext}`
+  const { error } = await supabase.storage.from('wedding-photos').upload(path, file, {
+    upsert: true,
+    contentType: file instanceof File ? file.type : undefined,
+  })
+  if (error) {
+    return { url: null, error: new Error(String(error)) }
+  }
+  return { url: getPublicUrl('wedding-photos', path), error: null }
+}

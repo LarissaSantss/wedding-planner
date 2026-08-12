@@ -8,7 +8,7 @@ interface UseAuthReturn {
   loading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<{ error: Error | null }>
-  register: (email: string, password: string) => Promise<{ error: Error | null }>
+  register: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>
   logout: () => Promise<void>
 }
 
@@ -53,8 +53,8 @@ export function useAuth(): UseAuthReturn {
     return { error }
   }, [])
 
-  const register = useCallback(async (email: string, password: string) => {
-    const { error } = await signUp(email, password)
+  const register = useCallback(async (email: string, password: string, fullName?: string) => {
+    const { error } = await signUp(email, password, fullName)
     return { error }
   }, [])
 

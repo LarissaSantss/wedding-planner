@@ -1,30 +1,6 @@
-{/* 
-  ============================================================================
-  DIRECTION CONTRACT — EVENT DASHBOARD (surface: EventDashboard, mode: Operate)
-  ----------------------------------------------------------------------------
-  THESIS: O dashboard do evento como um "cartão de convite vivo" — hero com
-  gradiente do tema, contagem regressiva em três blocos e métricas-chave em
-  cards; rejeita o template hero-metric genérico (big number + small label
-  disperso) ao concentrar a identidade do evento no primeiro viewport.
-  OWN-WORLD: Sistema de tokens `--theme-*` gerados por src/utils/theme.ts.
-  O gradiente do preset escolhido dita a cor do hero; superfície e texto
-  seguem o mesmo token. Emojis de tipo de evento (💍, 👑) são marca visual
-  solicitada explicitamente no brief do produto.
-  STORY: O organizador vê, em segundos, o que importa — data, contagem,
-  orçamento e convidados — e encontra o caminho para configurar ou abrir
-  módulos de planejamento.
-  FIRST VIEWPORT: Topbar (marca + seletor de eventos + botão configurações);
-  hero com badge de tipo, título, nomes dos clientes e contagem regressiva;
-  grade de métricas; grade de módulos do planejamento.
-  FORM: Novas superfícies dentro do mundo estabelecido (tokens de tema);
-  seleção direta, sem tournament.
-  FINISH: unreviewed and undocumented is unfinished; this build ends with the
-  finish review, the verdict, and DESIGN.md.
-  ============================================================================
-*/}
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import type { Event } from '../../lib/supabase/types'
+import type { Event, EventUpdate } from '../../lib/supabase/types'
 import { getThemeStyle } from '../../utils/theme'
 import {
   EVENT_TYPE_LABELS,
@@ -33,39 +9,22 @@ import {
   formatCurrency,
   formatNumber,
   formatDate,
-  daysUntil,
+  buildDateDiff,
+  getCoupleLabel,
 } from '../../utils/eventFormat'
+import { uploadEventCover } from '../../lib/supabase/storage'
+import {
+  fetchGuestsByEvent,
+  fetchExpensesByEvent,
+} from '../../lib/supabase/database'
 
 interface EventDashboardProps {
   event: Event
   events: Event[]
   onSelectEvent: (id: string) => void
   onOpenSettings: () => void
-}
-
-interface CountdownUnit {
-  value: number
-  label: string
-}
-
-/** Quebra a contagem regressiva em dias, horas, minutos e segundos */
-function buildCountdown(isoDate: string | null | undefined): CountdownUnit[] {
-  const days = daysUntil(isoDate)
-  if (days === null) return []
-
-  if (days <= 0) {
-    return [
-      { value: Math.max(0, days), label: 'dias' },
-      { value: 0, label: 'horas' },
-      { value: 0, label: 'min' },
-    ]
-  }
-
-  return [
-    { value: days, label: 'dias' },
-    { value: 0, label: 'horas' },
-    { value: 0, label: 'min' },
-  ]
+  onOpenGuests: () => void
+  onSaveEvent: (values: EventUpdate) => Promise<void>
 }
 
 const MODULES = [
@@ -76,48 +35,194 @@ const MODULES = [
   { id: 'gifts', icon: '🎁', title: 'Presentes', caption: 'Lista de registro' },
 ]
 
+const SIDEBAR_NAV = [
+  { id: 'dashboard', icon: '🏠', label: 'Painel' },
+  { id: 'guests', icon: '👥', label: 'Convidados' },
+  { id: 'vendors', icon: '🤝', label: 'Fornecedores' },
+  { id: 'tasks', icon: '✅', label: 'Tarefas' },
+  { id: 'expenses', icon: '💰', label: 'Orçamento' },
+  { id: 'gifts', icon: '🎁', label: 'Presentes' },
+  { id: 'settings', icon: '⚙️', label: 'Configurações' },
+] as const
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
 /**
- * Dashboard principal do evento.
- *
- * - Resumo do evento ativo: nomes, tipo, contagem regressiva, orçamento, convidados
- * - Seletor para trocar entre eventos do usuário
- * - Acesso às configurações do evento
- * - Atalhos para módulos de planejamento
- *
- * Uso:
- *   <EventDashboard event={event} events={events}
- *     onSelectEvent={selectEvent} onOpenSettings={() => setView('settings')} />
+ * Dashboard principal com menu lateral retrátil, foto de capa do casal,
+ * contador em anos/meses/dias e cards de visão geral com dados reais.
  */
 export function EventDashboard({
   event,
   events,
   onSelectEvent,
   onOpenSettings,
+  onOpenGuests,
+  onSaveEvent,
 }: EventDashboardProps) {
-  const themeStyle = useMemo<CSSProperties>(() => getThemeStyle(event.theme_preset), [event.theme_preset])
-  const countdown = useMemo(() => buildCountdown(event.date), [event.date])
-
-  const clientNames = [event.client_name_1, event.client_name_2].filter(
-    (name): name is string => Boolean(name),
+  const themeStyle = useMemo<CSSProperties>(
+    () =>
+      getThemeStyle(
+        event.theme_preset,
+        event.theme_preset === 'custom'
+          ? {
+              primary: event.custom_primary,
+              secondary: event.custom_secondary,
+              accent: event.custom_accent,
+            }
+          : undefined,
+      ),
+    [event.theme_preset, event.custom_primary, event.custom_secondary, event.custom_accent],
   )
-  const coupleText = clientNames.length > 0 ? clientNames.join(' & ') : null
+
+  const dateDiff = useMemo(() => buildDateDiff(event.date), [event.date])
+  const coupleText = getCoupleLabel(event)
+  const hasDate = Boolean(event.date)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
+
+  const [guestCount, setGuestCount] = useState(0)
+  const [confirmedCount, setConfirmedCount] = useState(0)
+  const [spent, setSpent] = useState(0)
+
+  useEffect(() => {
+    let mounted = true
+    void (async () => {
+      const [guestsRes, expensesRes] = await Promise.all([
+        fetchGuestsByEvent(event.id),
+        fetchExpensesByEvent(event.id),
+      ])
+      if (!mounted) return
+
+      const guests = guestsRes.data ?? []
+      setGuestCount(guests.length)
+      setConfirmedCount(guests.filter((g) => g.rsvp_status === 'confirmed').length)
+
+      const expenses = expensesRes.data ?? []
+      const total = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+      setSpent(total)
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [event.id])
+
+  const handlePickPhoto = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    setUploading(true)
+    setUploadError(null)
+    const { url, error } = await uploadEventCover(event.id, file)
+    if (error) {
+      setUploadError('Não foi possível enviar a foto. Tente novamente.')
+    } else if (url) {
+      await onSaveEvent({ cover_image_url: url })
+    }
+    setUploading(false)
+  }
+
+  const handleNav = (id: (typeof SIDEBAR_NAV)[number]['id']) => {
+    if (id === 'guests') void onOpenGuests()
+    else if (id === 'settings') void onOpenSettings()
+  }
+
+  const budget = event.budget ?? 0
+  const budgetPercent = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : null
 
   return (
     <div className="dashboard-shell" style={themeStyle}>
-      <header className="dashboard-topbar">
-        <div className="dashboard-brand">
-          <span className="dashboard-brand-mark" aria-hidden="true">
-            {EVENT_TYPE_ICONS[event.event_type]}
-          </span>
-          <span className="dashboard-brand-name">Wedding & Events Planner</span>
-        </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => void handleFileChange(e)}
+        aria-hidden="true"
+      />
 
-        <div className="dashboard-controls">
+      <div className={`app-layout${collapsed ? ' is-collapsed' : ''}`}>
+        {/* ===================== SIDEBAR ===================== */}
+        <aside className={`event-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Menu do evento">
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={() => setCollapsed((v) => !v)}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Expandir menu' : 'Minimizar menu'}
+            title={collapsed ? 'Expandir menu' : 'Minimizar menu'}
+          >
+            <span aria-hidden="true">{collapsed ? '»' : '«'}</span>
+          </button>
+
+          <div className="sidebar-profile">
+            <button
+              type="button"
+              className="sidebar-avatar-wrap"
+              onClick={handlePickPhoto}
+              disabled={uploading}
+              aria-label="Alterar foto de perfil do evento"
+            >
+              {event.cover_image_url ? (
+                <img
+                  className="sidebar-avatar"
+                  src={event.cover_image_url}
+                  alt="Foto de perfil do evento"
+                />
+              ) : (
+                <span className="sidebar-avatar sidebar-avatar-fallback" aria-hidden="true">
+                  {EVENT_TYPE_ICONS[event.event_type]}
+                </span>
+              )}
+              <span className="sidebar-avatar-badge" aria-hidden="true">
+                {uploading ? '⏳' : '📷'}
+              </span>
+            </button>
+
+            <h2 className="sidebar-event-name">{event.title}</h2>
+            <p className="sidebar-event-type">
+              {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]}
+            </p>
+          </div>
+
+          <nav className="sidebar-nav">
+            {SIDEBAR_NAV.map((item) => {
+              const isEnabled = item.id === 'dashboard' || item.id === 'guests' || item.id === 'settings'
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`sidebar-nav-item${item.id === 'dashboard' ? ' is-active' : ''}${isEnabled ? '' : ' is-disabled'}`}
+                  disabled={!isEnabled}
+                  onClick={() => handleNav(item.id)}
+                >
+                  <span className="sidebar-nav-icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  <span className="sidebar-nav-label">{item.label}</span>
+                  {!isEnabled && <span className="sidebar-nav-soon">em breve</span>}
+                </button>
+              )
+            })}
+          </nav>
+
           {events.length > 1 && (
-            <div className="event-selector">
+            <div className="sidebar-event-switch">
+              <label className="form-label" htmlFor="sidebar-event-select">
+                Trocar evento
+              </label>
               <select
-                className="form-control event-selector-native"
-                aria-label="Selecionar evento"
+                id="sidebar-event-select"
+                className="form-control"
                 value={event.id}
                 onChange={(e) => onSelectEvent(e.target.value)}
               >
@@ -129,90 +234,160 @@ export function EventDashboard({
               </select>
             </div>
           )}
+        </aside>
 
-          <button type="button" className="btn-secondary" onClick={onOpenSettings}>
-            Configurações
-          </button>
-        </div>
-      </header>
-
-      <main className="dashboard-main">
-        {/* Hero do evento — primeiro viewport */}
-        <section className="event-hero" aria-label="Resumo do evento">
-          <span className="event-hero-badge">
-            {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]} ·{' '}
-            {EVENT_STATUS_LABELS[event.status]}
-          </span>
-
-          <h1 className="event-hero-title">{event.title}</h1>
-          {coupleText && <p className="event-hero-couple">{coupleText}</p>}
-
-          <div className="event-hero-countdown">
-            {countdown.length > 0 ? (
-              countdown.map((unit, index) => (
-                <span key={unit.label} className="countdown-block">
-                  {index > 0 && <span className="countdown-divider" aria-hidden="true" />}
-                  <span className="countdown-number">{unit.value}</span>
-                  <span className="countdown-label">{unit.label}</span>
-                </span>
-              ))
-            ) : (
-              <span className="countdown-number" style={{ fontSize: '1.25rem' }}>
-                Data a definir
+        {/* ===================== MAIN ===================== */}
+        <main className="event-main">
+          <header className="dashboard-topbar">
+            <div className="dashboard-brand">
+              <span className="dashboard-brand-mark" aria-hidden="true">
+                {EVENT_TYPE_ICONS[event.event_type]}
               </span>
-            )}
-          </div>
-        </section>
-
-        {/* Métricas-chave */}
-        <section className="event-metrics" aria-label="Métricas do evento">
-          <article className="metric-card">
-            <p className="metric-label">Data</p>
-            <p className="metric-value" style={{ fontSize: '1.2rem' }}>
-              {formatDate(event.date)}
-            </p>
-            <p className="metric-hint">
-              {event.location ? `📍 ${event.location}` : 'Local a definir'}
-            </p>
-          </article>
-
-          <article className="metric-card">
-            <p className="metric-label">Orçamento</p>
-            <p className="metric-value">{formatCurrency(event.budget)}</p>
-            <p className="metric-hint">{event.budget ? 'Orçamento planejado' : 'Defina no painel'}</p>
-          </article>
-
-          <article className="metric-card">
-            <p className="metric-label">Convidados</p>
-            <p className="metric-value">{formatNumber(event.guest_count)}</p>
-            <p className="metric-hint">{event.guest_count ? 'Convidados planejados' : 'Defina no painel'}</p>
-          </article>
-        </section>
-
-        {/* Módulos do planejamento */}
-        <section className="modules-section" aria-labelledby="modules-heading">
-          <h2 id="modules-heading" className="section-heading">
-            Meu planejamento
-          </h2>
-          <div className="module-grid">
-            {MODULES.map((module) => (
-              <button
-                key={module.id}
-                type="button"
-                className="module-card"
-                aria-label={`Abrir módulo ${module.title}`}
-              >
-                <span className="module-card-icon" aria-hidden="true">
-                  {module.icon}
-                </span>
-                <span className="module-card-title">{module.title}</span>
-                <span className="module-card-caption">{module.caption}</span>
+              <span className="dashboard-brand-name">Wedding & Events Planner</span>
+            </div>
+            <div className="dashboard-controls">
+              <button type="button" className="btn-secondary" onClick={onOpenSettings}>
+                Configurações
               </button>
-            ))}
-          </div>
-        </section>
+            </div>
+          </header>
 
-      </main>
+          <div className="dashboard-main">
+            {/* Hero do evento — primeiro viewport, com fundo fotográfico fosco */}
+            <section className="event-hero" aria-label="Resumo do evento">
+              {event.cover_image_url && (
+                <div
+                  className="event-hero-bg"
+                  style={{ backgroundImage: `url(${event.cover_image_url})` }}
+                  aria-hidden="true"
+                />
+              )}
+
+              <span className="event-hero-badge">
+                {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]} ·{' '}
+                {EVENT_STATUS_LABELS[event.status]}
+              </span>
+
+              <h1 className="event-hero-title">
+                {EVENT_TYPE_LABELS[event.event_type]} {coupleText ?? event.title}
+              </h1>
+              {coupleText && <p className="event-hero-couple">{event.title}</p>}
+
+              <button
+                type="button"
+                className="hero-photo-btn"
+                onClick={handlePickPhoto}
+                disabled={uploading}
+              >
+                {uploading ? 'Enviando...' : event.cover_image_url ? '📷 Trocar foto' : '📷 Adicionar foto'}
+              </button>
+            </section>
+
+            {/* Contador em cartões delicados (anos / meses / dias) */}
+            {hasDate && dateDiff && (
+              <section className="countdown-cards" aria-label="Contagem regressiva">
+                <article className="countdown-card">
+                  <span className="countdown-card-number">{pad2(dateDiff.years)}</span>
+                  <span className="countdown-card-label">
+                    {dateDiff.years === 1 ? 'ano' : 'anos'}
+                  </span>
+                </article>
+                <article className="countdown-card">
+                  <span className="countdown-card-number">{pad2(dateDiff.months)}</span>
+                  <span className="countdown-card-label">
+                    {dateDiff.months === 1 ? 'mês' : 'meses'}
+                  </span>
+                </article>
+                <article className="countdown-card">
+                  <span className="countdown-card-number">{pad2(dateDiff.days)}</span>
+                  <span className="countdown-card-label">
+                    {dateDiff.days === 1 ? 'dia' : 'dias'}
+                  </span>
+                </article>
+              </section>
+            )}
+
+            {uploadError && (
+              <p className="auth-error" role="alert">
+                ⚠ {uploadError}
+              </p>
+            )}
+
+            {/* Cards de acesso rápido */}
+            <section className="overview-cards" aria-label="Visão geral do projeto">
+              <article className="overview-card">
+                <span className="overview-card-icon" aria-hidden="true">📅</span>
+                <div className="overview-card-body">
+                  <p className="overview-card-label">Data do Evento</p>
+                  <p className="overview-card-value">{formatDate(event.date)}</p>
+                  <p className="overview-card-hint">
+                    {event.location ? `📍 ${event.location}` : 'Local a definir'}
+                  </p>
+                </div>
+              </article>
+
+              <article className="overview-card">
+                <span className="overview-card-icon" aria-hidden="true">💰</span>
+                <div className="overview-card-body">
+                  <p className="overview-card-label">Orçamento / Financeiro</p>
+                  <p className="overview-card-value">
+                    {formatCurrency(spent)}
+                    {budget > 0 && (
+                      <span className="overview-card-muted"> de {formatCurrency(budget)}</span>
+                    )}
+                  </p>
+                  {budgetPercent !== null ? (
+                    <div className="overview-progress" role="progressbar" aria-valuenow={budgetPercent} aria-valuemin={0} aria-valuemax={100}>
+                      <span className="overview-progress-fill" style={{ width: `${budgetPercent}%` }} />
+                    </div>
+                  ) : (
+                    <p className="overview-card-hint">Defina o teto do orçamento no painel</p>
+                  )}
+                </div>
+              </article>
+
+              <article className="overview-card">
+                <span className="overview-card-icon" aria-hidden="true">👥</span>
+                <div className="overview-card-body">
+                  <p className="overview-card-label">Resumo de Convidados</p>
+                  <p className="overview-card-value">
+                    {formatNumber(guestCount)}
+                    <span className="overview-card-muted"> adicionados</span>
+                  </p>
+                  <p className="overview-card-hint">
+                    {formatNumber(confirmedCount)} confirmados ·{' '}
+                    {event.guest_count ? `${formatNumber(event.guest_count)} previstos` : 'sem meta definida'}
+                  </p>
+                </div>
+              </article>
+            </section>
+
+            {/* Módulos do planejamento */}
+            <section className="modules-section" aria-labelledby="modules-heading">
+              <h2 id="modules-heading" className="section-heading">
+                Meu planejamento
+              </h2>
+              <div className="module-grid">
+                {MODULES.map((module) => (
+                  <button
+                    key={module.id}
+                    type="button"
+                    className="module-card"
+                    aria-label={`Abrir módulo ${module.title}`}
+                    onClick={module.id === 'guests' ? () => void onOpenGuests() : undefined}
+                  >
+                    <span className="module-card-icon" aria-hidden="true">
+                      {module.icon}
+                    </span>
+                    <span className="module-card-title">{module.title}</span>
+                    <span className="module-card-caption">{module.caption}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }

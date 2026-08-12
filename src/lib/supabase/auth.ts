@@ -4,12 +4,17 @@ import type { Session } from '@supabase/supabase-js'
 // ========== AUTENTICAÇÃO ==========
 
 /**
- * Cadastra um novo usuário com email e senha
+ * Cadastra um novo usuário com email, senha e nome completo.
+ * O nome é salvo em user_metadata.full_name e copiado para
+ * profiles.full_name pelo trigger handle_new_user.
  */
-export async function signUp(email: string, password: string) {
+export async function signUp(email: string, password: string, fullName?: string) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: fullName ? { full_name: fullName } : undefined,
+    },
   })
   return { data, error }
 }

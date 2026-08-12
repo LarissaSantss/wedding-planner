@@ -40,6 +40,7 @@ export function AuthScreen() {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -90,7 +91,12 @@ export function AuthScreen() {
         )
       }
     } else {
-      const { error: signUpError } = await signUp(email.trim(), password)
+      if (!fullName.trim()) {
+        setError('Preencha seu nome completo para continuar.')
+        setLoading(false)
+        return
+      }
+      const { error: signUpError } = await signUp(email.trim(), password, fullName.trim())
       if (signUpError) {
         setError('Não foi possível criar a conta. Verifique o email e tente novamente.')
       } else {
@@ -135,7 +141,25 @@ export function AuthScreen() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate>
-            <div className="form-field">
+            {mode === 'signup' && (
+              <div className="form-field">
+                <label className="form-label" htmlFor="auth-name">
+                  Nome completo
+                </label>
+                <input
+                  id="auth-name"
+                  className="form-control"
+                  type="text"
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  required
+                />
+              </div>
+            )}
+
+            <div className="form-field" style={{ marginTop: mode === 'signup' ? '1rem' : undefined }}>
               <label className="form-label" htmlFor="auth-email">
                 Email
               </label>

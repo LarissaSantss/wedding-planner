@@ -1111,3 +1111,6 @@ git commit -m "fix: ajustes do teste manual de responsividade e fluxos"
 - `EventCreate({ theme, onCreated })` — `theme: ThemePreset`, `onCreated: (title: string) => void`; EventView passa `theme={event.theme_preset}` e `theme="rose-gold"` no caso sem evento. ✔
 - `GuestList({ event, onBack })` — `event: Event`, `onBack: () => void`; EventView passa `event={event}`. ✔
 - `EventDashboard` props novas `onCreateEvent: () => void` e `onOpenModule: (id: string) => void`; EventView passa ambas. ✔
+- `createGuest` retorna `QueryResult<Guest>` com `.data` e `.error`; GuestList usa `data` e `error`. ✔
+- `createEvent(values)` aceita `EventInsert`; EventCreate monta objeto compatível (com `status: 'draft' as const`). ✔
+```

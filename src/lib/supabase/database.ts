@@ -5,6 +5,17 @@ import type {
   EventUpdate,
   Guest,
   GuestInsert,
+  GuestGroup,
+  GuestGroupInsert,
+  GuestCompanion,
+  GuestCompanionInsert,
+  GuestVote,
+  GuestVoteValue,
+  GuestComment,
+  GuestCommentInsert,
+  EventMember,
+  EventMemberRole,
+  GuestPriority,
   Vendor,
   VendorInsert,
   Task,
@@ -198,10 +209,19 @@ export async function fetchEventById(id: string): Promise<QueryResult<Event>> {
 
 /**
  * Cria um novo evento.
- * O `user_id` é preenchido automaticamente pela RLS (auth.uid()).
+ * O `user_id` é obtido da sessão autenticada e enviado no insert,
+ * pois a coluna é NOT NULL e a RLS exige `auth.uid() = user_id`.
  */
 export async function createEvent(values: EventInsert): Promise<QueryResult<Event>> {
-  return insertRecord<Event>('events', values as Record<string, unknown>)
+  const { data } = await supabase.auth.getSession()
+  const userId = data.session?.user?.id
+  if (!userId) {
+    return { data: null, error: new Error('NOT_AUTHENTICATED') }
+  }
+  return insertRecord<Event>('events', {
+    ...values,
+    user_id: userId,
+  } as Record<string, unknown>)
 }
 
 /**
@@ -221,6 +241,16 @@ export async function deleteEvent(id: string): Promise<{ error: Error | null }> 
   return deleteRecord('events', id)
 }
 
+/**
+ * Entra em um evento existente usando o código de acesso.
+ * A RPC (security definer) localiza o evento pelo código e registra
+ * o usuário autenticado como membro (editor) do evento.
+ */
+export async function joinEventByCode(code: string): Promise<QueryResult<Event>> {
+  const { data, error } = await supabase.rpc('join_event_by_code', { p_code: code })
+  return { data: data as Event | null, error }
+}
+
 // ========== OPERAÇÕES ESPECÍFICAS: GUESTS ==========
 
 /**
@@ -235,9 +265,40 @@ export async function fetchGuestsByEvent(
 
 /**
  * Cria um novo convidado para um evento.
+ * O `created_by` vem da sessão. Só `name` e `event_id` são obrigatórios.
  */
 export async function createGuest(values: GuestInsert): Promise<QueryResult<Guest>> {
-  return insertRecord<Guest>('guests', values as Record<string, unknown>)
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id ?? null
+  return insertRecord<Guest>('guests', {
+    ...values,
+    created_by: userId,
+  } as Record<string, unknown>)
+}
+
+/**
+ * Cadastro rápido: cria vários convidados de uma só vez.
+ * Cada item exige apenas `name`; os demais campos ficam pendentes.
+ */
+export async function createGuests(
+  eventId: string,
+  names: string[],
+): Promise<QueryListResult<Guest>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id ?? null
+
+  const rows = names.map((name) => ({
+    event_id: eventId,
+    name: name.trim(),
+    created_by: userId,
+  }))
+
+  const { data, error } = await supabase
+    .from('guests')
+    .insert(rows)
+    .select()
+
+  return { data: data as Guest[] | null, error }
 }
 
 /**
@@ -414,4 +475,226 @@ export async function deleteGiftRegistryItem(
   id: string,
 ): Promise<{ error: Error | null }> {
   return deleteRecord('gift_registry_items', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: GRUPOS DE CONVIDADOS ==========
+
+/** Busca os grupos de um evento. */
+export async function fetchGuestGroups(
+  eventId: string,
+): Promise<QueryListResult<GuestGroup>> {
+  return fetchWithFilter<GuestGroup>('event_guest_groups', { event_id: eventId }, {
+    orderBy: { column: 'created_at', ascending: true },
+  })
+}
+
+/** Cria um grupo para um evento. */
+export async function createGuestGroup(
+  values: GuestGroupInsert,
+): Promise<QueryResult<GuestGroup>> {
+  return insertRecord<GuestGroup>('event_guest_groups', values as Record<string, unknown>)
+}
+
+/** Renomeia um grupo. */
+export async function updateGuestGroup(
+  id: string,
+  values: Partial<GuestGroup>,
+): Promise<QueryResult<GuestGroup>> {
+  return updateRecord<GuestGroup>('event_guest_groups', id, values as Record<string, unknown>)
+}
+
+/** Remove um grupo (convidados ligados ficam sem grupo via SET NULL). */
+export async function deleteGuestGroup(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('event_guest_groups', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: ACOMPANHANTES ==========
+
+/** Busca acompanhantes de um convidado. */
+export async function fetchCompanionsByGuest(
+  guestId: string,
+): Promise<QueryListResult<GuestCompanion>> {
+  return fetchWithFilter<GuestCompanion>('guest_companions', { guest_id: guestId }, {
+    orderBy: { column: 'created_at', ascending: true },
+  })
+}
+
+/** Cria um acompanhante. */
+export async function createCompanion(
+  values: GuestCompanionInsert,
+): Promise<QueryResult<GuestCompanion>> {
+  return insertRecord<GuestCompanion>('guest_companions', values as Record<string, unknown>)
+}
+
+/** Atualiza um acompanhante. */
+export async function updateCompanion(
+  id: string,
+  values: Partial<GuestCompanion>,
+): Promise<QueryResult<GuestCompanion>> {
+  return updateRecord<GuestCompanion>('guest_companions', id, values as Record<string, unknown>)
+}
+
+/** Remove um acompanhante. */
+export async function deleteCompanion(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('guest_companions', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: VOTOS ==========
+
+/** Busca os votos de um convidado. */
+export async function fetchVotesByGuest(
+  guestId: string,
+): Promise<QueryListResult<GuestVote>> {
+  return fetchWithFilter<GuestVote>('guest_votes', { guest_id: guestId })
+}
+
+/**
+ * Cria ou substitui o voto do usuário atual em um convidado.
+ * O `user_id` vem da sessão; a RLS garante can_vote e one-vote-per-user.
+ */
+export async function upsertVote(
+  guestId: string,
+  vote: GuestVoteValue,
+): Promise<QueryResult<GuestVote>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { data: null, error: new Error('NOT_AUTHENTICATED') }
+  }
+
+  const { data, error } = await supabase
+    .from('guest_votes')
+    .upsert({ guest_id: guestId, user_id: userId, vote }, { onConflict: 'guest_id,user_id' })
+    .select()
+    .single()
+
+  return { data: data as GuestVote | null, error }
+}
+
+/** Remove o voto do usuário atual em um convidado. */
+export async function deleteMyVote(guestId: string): Promise<{ error: Error | null }> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { error: new Error('NOT_AUTHENTICATED') }
+  }
+  const { error } = await supabase
+    .from('guest_votes')
+    .delete()
+    .eq('guest_id', guestId)
+    .eq('user_id', userId)
+  return { error }
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: DISCUSSÃO (COMENTÁRIOS) ==========
+
+/** Busca os comentários de um convidado. */
+export async function fetchCommentsByGuest(
+  guestId: string,
+): Promise<QueryListResult<GuestComment>> {
+  return fetchWithFilter<GuestComment>('guest_comments', { guest_id: guestId }, {
+    orderBy: { column: 'created_at', ascending: true },
+  })
+}
+
+/** Cria um comentário (autoria via sessão). */
+export async function createComment(
+  values: GuestCommentInsert,
+): Promise<QueryResult<GuestComment>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { data: null, error: new Error('NOT_AUTHENTICATED') }
+  }
+  return insertRecord<GuestComment>('guest_comments', {
+    ...values,
+    user_id: userId,
+  } as Record<string, unknown>)
+}
+
+/** Remove um comentário (apenas o próprio autor, por RLS). */
+export async function deleteComment(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('guest_comments', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: MEMBROS E PERMISSÕES ==========
+
+/** Busca as permissões do usuário atual no evento. */
+export async function fetchMyPermissions(
+  eventId: string,
+): Promise<{ can_vote: boolean; can_comment: boolean; can_prioritize: boolean; is_owner: boolean }> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { can_vote: false, can_comment: false, can_prioritize: false, is_owner: false }
+  }
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('user_id')
+    .eq('id', eventId)
+    .single()
+
+  if (event?.user_id === userId) {
+    return { can_vote: true, can_comment: true, can_prioritize: true, is_owner: true }
+  }
+
+  const { data: member } = await supabase
+    .from('event_members')
+    .select('can_vote,can_comment,can_prioritize')
+    .eq('event_id', eventId)
+    .eq('user_id', userId)
+    .single()
+
+  return {
+    can_vote: member?.can_vote ?? false,
+    can_comment: member?.can_comment ?? false,
+    can_prioritize: member?.can_prioritize ?? false,
+    is_owner: false,
+  }
+}
+
+/** Lista os membros do evento (com perfil) — RPC security definer. */
+export async function fetchEventMembers(eventId: string) {
+  const { data, error } = await supabase.rpc('list_event_members', { p_event_id: eventId })
+  return {
+    data: data as Array<EventMember & { email: string | null; full_name: string | null }> | null,
+    error,
+  }
+}
+
+/** Atualiza role + flags + relacionamento de um membro (owner/admin) — RPC. */
+export async function updateMemberPermissions(
+  eventId: string,
+  memberUserId: string,
+  input: {
+    role: EventMemberRole
+    can_vote: boolean
+    can_comment: boolean
+    can_prioritize: boolean
+    relationship_to_event: string | null
+  },
+): Promise<QueryResult<EventMember>> {
+  const { data, error } = await supabase.rpc('update_member_permissions', {
+    p_event_id: eventId,
+    p_user_id: memberUserId,
+    p_role: input.role,
+    p_can_vote: input.can_vote,
+    p_can_comment: input.can_comment,
+    p_can_prioritize: input.can_prioritize,
+    p_relationship_to_event: input.relationship_to_event,
+  })
+  return { data: data as EventMember | null, error }
+}
+
+/** Define a prioridade de um convidado (somente can_prioritize) — RPC. */
+export async function setGuestPriority(
+  guestId: string,
+  priority: GuestPriority,
+): Promise<QueryResult<Guest>> {
+  const { data, error } = await supabase.rpc('set_guest_priority', {
+    p_guest_id: guestId,
+    p_priority: priority,
+  })
+  return { data: data as Guest | null, error }
 }
