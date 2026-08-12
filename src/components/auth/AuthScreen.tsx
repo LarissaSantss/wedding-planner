@@ -19,7 +19,7 @@
 */}
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
-import { signIn, signUp } from '../../lib/supabase/auth'
+import { signIn, signUp, resendConfirmationEmail } from '../../lib/supabase/auth'
 import { getThemeStyle } from '../../utils/theme'
 
 type Mode = 'login' | 'signup'
@@ -43,6 +43,7 @@ export function AuthScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [resending, setResending] = useState(false)
 
   const switchMode = (next: Mode) => {
     setMode(next)
@@ -65,14 +66,22 @@ export function AuthScreen() {
     if (mode === 'login') {
       const { error: signInError } = await signIn(email.trim(), password)
       if (signInError) {
-        setError('Email ou senha incorretos. Verifique e tente novamente.')
+        const isNotConfirmed =
+          signInError instanceof Error &&
+          'code' in signInError &&
+          (signInError as Error & { code?: string }).code === 'email_not_confirmed'
+        setError(
+          isNotConfirmed
+            ? 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada (e o spam) e clique no link de confirmação, ou reenvie o e-mail abaixo.'
+            : 'Email ou senha incorretos. Verifique e tente novamente.',
+        )
       }
     } else {
       const { error: signUpError } = await signUp(email.trim(), password)
       if (signUpError) {
         setError('Não foi possível criar a conta. Verifique o email e tente novamente.')
       } else {
-        setSuccess('Conta criada! Verifique seu email para confirmar, se necessário.')
+        setSuccess('Conta criada! Enviamos um link de confirmação para seu e-mail. Clique no link antes de entrar. Se não encontrar, verifique a caixa de spam.')
       }
     }
 
@@ -157,6 +166,20 @@ export function AuthScreen() {
               </p>
             )}
 
+            {(error === 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada (e o spam) e clique no link de confirmação, ou reenvie o e-mail abaixo.' ||
+              success === 'Conta criada! Enviamos um link de confirmação para seu e-mail. Clique no link antes de entrar. Se não encontrar, verifique a caixa de spam.' ||
+              (mode === 'signup' && success)) && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ width: '100%', marginTop: '0.75rem' }}
+                onClick={() => void handleResend()}
+                disabled={resending}
+              >
+                {resending ? 'Enviando...' : 'Reenviar e-mail de confirmação'}
+              </button>
+            )}
+
             <button type="submit" className="btn-primary auth-submit" disabled={loading}>
               {loading
                 ? 'Aguarde...'
@@ -169,4 +192,17 @@ export function AuthScreen() {
       </main>
     </div>
   )
+}
+
+const handleResend = async () => {
+  if (!email.trim()) return
+  setResending(true)
+  const { error: resendError } = await resendConfirmationEmail(email.trim())
+  if (resendError) {
+    setError('Não foi possível reenviar o e-mail. Verifique se o email está correto e tente novamente.')
+  } else {
+    setError(null)
+    setSuccess('E-mail de confirmação reenviado. Verifique sua caixa de entrada (e o spam).')
+  }
+  setResending(false)
 }
