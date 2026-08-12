@@ -6,6 +6,14 @@ O site Wedding & Events Planner funciona corretamente na tela de login, mas:
 
 1. **Não é responsivo** — o layout não ocupa a tela toda e quebra em celulares.
 2. **E-mail de confirmação** — o usuário quer entender como funciona o fluxo de confirmação de conta.
+3. **Ausência de tabelas no Supabase remoto** — o dashboard não tinha onde carregar eventos.
+
+## Status de Execução (registro contínuo)
+
+- Migration `20260101000000_initial_schema.sql` corrigida (usar `gen_random_uuid()` nativo do PG15 em vez da extensão `uuid-ossp`) e **aplicada** no banco remoto `wedding-planner` (`szrimbylarxaepwwafuq`) via `supabase db push --linked`. Tabelas `profiles`, `events`, `guests`, `vendors`, `tasks`, `expenses`, `gift_registry_items` criadas com RLS e policies.
+- Histórico de migrations remoto reparado: 10 migrations órfãs (`20260804...`) marcadas como `reverted` para permitir o push.
+- Projeto local linkado ao remoto via `supabase link --project-ref szrimbylarxaepwwafuq`.
+- **Pendente**: configuração de provedor SMTP customizado no painel do Supabase (ação manual do usuário) para entrega confiável do e-mail de confirmação.
 
 ## Causa Raiz
 

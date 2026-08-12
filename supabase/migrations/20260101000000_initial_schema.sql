@@ -2,7 +2,8 @@
 -- Cria as tabelas do banco de dados com suporte a múltiplos tipos de eventos e temas visuais
 
 -- ========== EXTENSÕES ==========
-create extension if not exists "uuid-ossp";
+-- gen_random_uuid() é nativo do PostgreSQL 13+ (Supabase usa PG15),
+-- então não precisamos da extensão uuid-ossp.
 
 -- ========== TABELA: PROFILES ==========
 create table if not exists public.profiles (
@@ -33,7 +34,7 @@ create trigger on_auth_user_created
 
 -- ========== TABELA: EVENTS (Multi-Eventos SaaS) ==========
 create table if not exists public.events (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   title text not null,
   event_type text check (event_type in ('wedding', 'debutante', 'birthday', 'anniversary', 'corporate', 'graduation', 'other')) default 'wedding',
@@ -53,7 +54,7 @@ create table if not exists public.events (
 
 -- ========== TABELA: GUESTS ==========
 create table if not exists public.guests (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events (id) on delete cascade,
   name text not null,
   email text,
@@ -67,7 +68,7 @@ create table if not exists public.guests (
 
 -- ========== TABELA: VENDORS ==========
 create table if not exists public.vendors (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events (id) on delete cascade,
   name text not null,
   category text,
@@ -84,7 +85,7 @@ create table if not exists public.vendors (
 
 -- ========== TABELA: TASKS ==========
 create table if not exists public.tasks (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events (id) on delete cascade,
   title text not null,
   description text,
@@ -98,7 +99,7 @@ create table if not exists public.tasks (
 
 -- ========== TABELA: EXPENSES ==========
 create table if not exists public.expenses (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events (id) on delete cascade,
   description text not null,
   amount numeric(12, 2) not null default 0,
@@ -111,7 +112,7 @@ create table if not exists public.expenses (
 
 -- ========== TABELA: GIFT_REGISTRY_ITEMS ==========
 create table if not exists public.gift_registry_items (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events (id) on delete cascade,
   name text not null,
   description text,
