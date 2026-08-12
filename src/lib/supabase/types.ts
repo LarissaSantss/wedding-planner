@@ -73,6 +73,7 @@ export interface Event {
   status: EventStatus
   created_at: string
   updated_at: string
+  code: string // Código único para acesso ao evento
 }
 
 // ========== TABELAS RELACIONADAS ==========
