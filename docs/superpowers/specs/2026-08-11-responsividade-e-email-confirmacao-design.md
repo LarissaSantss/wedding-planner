@@ -40,10 +40,14 @@ O `supabase/config.toml` tem `enable_confirmations = false`, mas isso **apenas c
 O envio de e-mail de confirmação é controlado no painel do Supabase remoto em:
 **Authentication → Sign In / Providers → Email → "Confirm email"**.
 
-- Se **ativado**: o Supabase envia um e-mail de confirmação ao cadastrar. O usuário precisa clicar no link para ativar a conta. Sem isso, o login falha. O e-mail pode cair em **spam/lixo eletrônico**.
-- Se **desativado**: o cadastro já cria a conta ativa e o login funciona imediatamente, sem e-mail.
+**Situação real relatada pelo usuário:**
+- Criar conta funciona (aparece "Conta criada!").
+- Nenhum e-mail de confirmação chega (nem na caixa de entrada, nem no spam).
+- Fazer login falha com "Email ou senha incorretos. Verifique e tente novamente."
 
-Como o usuário **conseguiu entrar** após criar a conta, a confirmação está **desativada** no projeto remoto. Se quiser ativar a confirmação por e-mail, é necessário habilitar no painel remoto e (idealmente) configurar um provedor SMTP customizado, pois o e-mail padrão do Supabase tem baixa taxa de entrega e costuma cair em spam.
+**Dedução:** a confirmação por e-mail está **ATIVADA** no Supabase remoto. O Supabase cria a conta em estado `unconfirmed`, bloqueia o login até a confirmação, e o e-mail de confirmação **não está sendo entregue** — comportamento comum do serviço de e-mail transacional padrão do Supabase, que tem baixa taxa de entrega e frequentemente cai em spam ou é bloqueado.
+
+**Impacto UX atual:** ao tentar logar, o usuário vê apenas "Email ou senha incorretos", sem entender que o problema é a não confirmação do e-mail. Não há como reenviar o e-mail de confirmação pela interface.
 
 ## Solução Proposta
 
@@ -65,9 +69,17 @@ Como o usuário **conseguiu entrar** após criar a conta, a confirmação está 
   - **Auth**: `.auth-card` tem `padding: 2.25rem 2rem` e `max-width: 400px`. Em telas pequenas, reduzir padding e garantir que o card caiba na tela.
   - **Formulários**: grid já colapsa para 1 coluna em `≤ 640px`. Garantir que `.form-actions` não cause overflow (botões "Cancelar" + "Salvar" + feedback).
 
-### 2. E-mail de confirmação
+### 2. E-mail de confirmação — experiência do usuário
 
-Não requer alteração de código. Ação de configuração no painel do Supabase remoto, se o usuário desejar ativar a confirmação. O comportamento atual (sem confirmação) é o esperado dado que o usuário consegue entrar.
+**Código (frontend):**
+- Adicionar função `resendConfirmationEmail(email)` em `src/lib/supabase/auth.ts` usando `supabase.auth.resend({ type: 'signup', email })`.
+- Na tela de cadastro (`AuthScreen.tsx`): quando a conta for criada, exibir mensagem clara: "Conta criada! Enviamos um link de confirmação para seu e-mail. Clique no link antes de entrar. Se não encontrar, verifique a caixa de spam." + botão "Reenviar e-mail de confirmação".
+- Na tela de login (`AuthScreen.tsx`): detectar o erro de e-mail não confirmado (`error.code === 'email_not_confirmed'` no `signInWithPassword`) e exibir mensagem específica em vez de "Email ou senha incorretos": "Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada (e o spam) e clique no link de confirmação, ou reenvie o e-mail." + botão "Reenviar e-mail".
+- Feedback de sucesso ao reenviar: "E-mail de confirmação reenviado. Verifique sua caixa de entrada (e o spam)."
+
+**Ação manual (painel do Supabase remoto — fora do código):**
+- Para destravar imediatamente: no painel **Authentication → Users**, confirmar manualmente o usuário criado.
+- Para o fluxo em produção: desativar "Confirm email" em **Authentication → Sign In / Providers → Email** (login imediato, sem e-mail) **OU** configurar um provedor SMTP customizado (ex: Resend, SendGrid, Amazon SES) em **Settings → Auth → SMTP** para entrega confiável dos e-mails.
 
 ## Critérios de Aceite
 
@@ -77,9 +89,12 @@ Não requer alteração de código. Ação de configuração no painel do Supaba
 - [ ] Dashboard, métricas e módulos se reorganizam corretamente em telas pequenas.
 - [ ] O fluxo de login/cadastro/dashboard funciona como antes (sem regressão).
 - [ ] O usuário entende o funcionamento do e-mail de confirmação (explicação documentada).
+- [ ] A tela de login diferencia erro de e-mail não confirmado de credenciais inválidas, com mensagem clara e botão de reenvio.
+- [ ] A tela de cadastro informa claramente que é preciso confirmar o e-mail antes de entrar e oferece reenvio.
 
 ## Fora de Escopo
 
 - Ativar/desativar a confirmação de e-mail no Supabase remoto (ação manual no painel pelo usuário).
 - Implementar provedor SMTP customizado.
-- Criar tela de "verifique seu e-mail" dedicada.
+- Criar tela de "verifique seu e-mail" dedicada (a confirmação acontece na tela de login/cadastro existente).
+- Confirmar manualmente usuários no painel do Supabase (ação manual pelo usuário).
