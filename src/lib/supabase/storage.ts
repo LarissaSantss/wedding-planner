@@ -107,6 +107,26 @@ export async function copyFile(bucketName: string, fromPath: string, toPath: str
 }
 
 /**
+ * Faz upload de um anexo de tarefa para o bucket privado
+ * `task-attachments` e retorna o caminho do arquivo.
+ */
+export async function uploadTaskFile(
+  taskId: string,
+  file: File,
+): Promise<{ path: string | null; error: Error | null }> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `${taskId}/${Date.now()}-${safeName}`
+  const { error } = await supabase.storage.from('task-attachments').upload(path, file, {
+    contentType: file.type,
+    upsert: false,
+  })
+  if (error) {
+    return { path: null, error: new Error(String(error)) }
+  }
+  return { path, error: null }
+}
+
+/**
  * Faz upload da foto de capa/perfil de um evento para o bucket público
  * `wedding-photos` e retorna a URL pública.
  *

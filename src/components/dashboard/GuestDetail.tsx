@@ -7,10 +7,12 @@ import type {
   GuestVote,
   GuestVoteValue,
   GuestComment,
+  GuestGroup,
   CompanionRelationship,
 } from '../../lib/supabase/types'
 import { getThemeStyle } from '../../utils/theme'
 import { COMPANION_RELATIONSHIP_LABELS, COMPANION_RELATIONSHIP_LIST } from '../../utils/eventFormat'
+import { CreatableGroupSelect } from './CreatableGroupSelect'
 import {
   fetchCompanionsByGuest,
   createCompanion,
@@ -29,9 +31,21 @@ interface GuestDetailProps {
   canVote: boolean
   canComment: boolean
   onClose: () => void
+  onGroupChange?: (guestId: string, groupId: string) => void
+  groups?: GuestGroup[]
+  onCreateGroup?: (name: string) => Promise<GuestGroup | null>
 }
 
-export function GuestDetail({ event, guest, canVote, canComment, onClose }: GuestDetailProps) {
+export function GuestDetail({
+  event,
+  guest,
+  canVote,
+  canComment,
+  onClose,
+  onGroupChange,
+  groups = [],
+  onCreateGroup,
+}: GuestDetailProps) {
   const themeStyle = getThemeStyle(
     event.theme_preset,
     event.theme_preset === 'custom'
@@ -150,7 +164,21 @@ export function GuestDetail({ event, guest, canVote, canComment, onClose }: Gues
             <div className="state-spinner" role="status" aria-label="Carregando" />
           </div>
         ) : (
-          <div className="guest-drawer-body">
+        <div className="guest-drawer-body">
+            {/* Grupo */}
+            {onGroupChange && onCreateGroup && (
+              <div className="form-field" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label" htmlFor="guest-detail-group">Grupo</label>
+                <CreatableGroupSelect
+                  groups={groups}
+                  value={guest.group_id ?? ''}
+                  onChange={(value) => onGroupChange(guest.id, value)}
+                  onCreate={onCreateGroup}
+                  inputId="guest-detail-group"
+                />
+              </div>
+            )}
+
             {/* Acompanhantes */}
             <section className="guest-drawer-section">
               <h3 className="guest-drawer-section-title">Acompanhantes</h3>

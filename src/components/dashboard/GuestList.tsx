@@ -4,6 +4,7 @@ import type { Event, Guest, GuestPriority } from '../../lib/supabase/types'
 import { getThemeStyle } from '../../utils/theme'
 import { useGuestModule } from '../../hooks/useGuestModule'
 import { GuestDetail } from './GuestDetail'
+import { CreatableGroupSelect } from './CreatableGroupSelect'
 
 interface GuestListProps {
   event: Event
@@ -42,9 +43,8 @@ export function GuestList({ event, onBack }: GuestListProps) {
     addGuest,
     addGuests,
     removeGuest,
+    updateGuest,
     addGroup,
-    renameGroup,
-    removeGroup,
     prioritize,
   } = useGuestModule(event.id)
 
@@ -57,10 +57,6 @@ export function GuestList({ event, onBack }: GuestListProps) {
   const [filterGroup, setFilterGroup] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null)
-
-  const [newGroupName, setNewGroupName] = useState('')
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
-  const [editingGroupName, setEditingGroupName] = useState('')
 
   const [quickMode, setQuickMode] = useState<'single' | 'bulk'>('single')
   const [bulkText, setBulkText] = useState('')
@@ -84,20 +80,6 @@ export function GuestList({ event, onBack }: GuestListProps) {
       setGroupId('')
     }
     setAdding(false)
-  }
-
-  const handleAddGroup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newGroupName.trim()) return
-    const ok = await addGroup(newGroupName.trim())
-    if (ok) setNewGroupName('')
-  }
-
-  const handleRenameGroup = async (id: string) => {
-    if (!editingGroupName.trim()) return
-    await renameGroup(id, editingGroupName.trim())
-    setEditingGroupId(null)
-    setEditingGroupName('')
   }
 
   const handlePriority = async (guest: Guest, priority: GuestPriority) => {
@@ -148,77 +130,11 @@ export function GuestList({ event, onBack }: GuestListProps) {
       </header>
 
       <main className="dashboard-main">
-        {/* Grupos */}
-        <section className="settings-section" aria-labelledby="groups-title">
-          <h2 id="groups-title" className="settings-section-title">Grupos</h2>
-          <p className="settings-section-desc">
-            Crie e gerencie os grupos deste evento (ex: Família da Noiva, Padrinhos, Trabalho).
-          </p>
-
-          <ul className="group-list">
-            {groups.map((g) => (
-              <li key={g.id} className="group-item">
-                {editingGroupId === g.id ? (
-                  <>
-                    <input
-                      className="form-control"
-                      value={editingGroupName}
-                      onChange={(e) => setEditingGroupName(e.target.value)}
-                      autoFocus
-                    />
-                    <button type="button" className="btn-primary" onClick={() => void handleRenameGroup(g.id)}>
-                      Salvar
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="group-name">{g.name}</span>
-                    <div className="group-actions">
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => {
-                          setEditingGroupId(g.id)
-                          setEditingGroupName(g.name)
-                        }}
-                      >
-                        Editar
-                      </button>
-                      <button type="button" className="btn-secondary" onClick={() => void removeGroup(g.id)}>
-                        Excluir
-                      </button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          <form onSubmit={handleAddGroup} className="guest-form-row">
-            <div className="form-field" style={{ flex: '1 1 220px' }}>
-              <label className="form-label" htmlFor="group-name">Nome do grupo</label>
-              <input
-                id="group-name"
-                className="form-control"
-                type="text"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="Ex: Família da Noiva"
-              />
-            </div>
-            <div style={{ alignSelf: 'flex-end' }}>
-              <button type="submit" className="btn-primary" disabled={!newGroupName.trim()}>
-                Criar grupo
-              </button>
-            </div>
-          </form>
-        </section>
-
         {/* Convidados */}
-        <section className="settings-section" aria-labelledby="guests-title" style={{ marginTop: '1.5rem' }}>
+        <section className="settings-section" aria-labelledby="guests-title">
           <h2 id="guests-title" className="settings-section-title">Convidados</h2>
           <p className="settings-section-desc">
-            Adicione rapidamente, defina prioridade e clique em um convidado para acompanhantes, votação e discussão.
+            Adicione rapidamente, defina grupo e prioridade e clique em um convidado para acompanhantes, votação e discussão.
           </p>
 
           <div className="guest-toolbar">
@@ -329,19 +245,15 @@ export function GuestList({ event, onBack }: GuestListProps) {
                   placeholder="Opcional"
                 />
               </div>
-              <div className="form-field" style={{ flex: '1 1 140px' }}>
+              <div className="form-field" style={{ flex: '1 1 160px' }}>
                 <label className="form-label" htmlFor="guest-group">Grupo</label>
-                <select
-                  id="guest-group"
-                  className="form-control"
+                <CreatableGroupSelect
+                  groups={groups}
                   value={groupId}
-                  onChange={(e) => setGroupId(e.target.value)}
-                >
-                  <option value="">Sem grupo</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
+                  onChange={setGroupId}
+                  onCreate={addGroup}
+                  inputId="guest-group"
+                />
               </div>
               <div style={{ alignSelf: 'flex-end' }}>
                 <button type="submit" className="btn-primary" disabled={adding || !name.trim()}>
@@ -413,6 +325,9 @@ export function GuestList({ event, onBack }: GuestListProps) {
           canVote={permissions.can_vote}
           canComment={permissions.can_comment}
           onClose={() => setSelectedGuest(null)}
+          onGroupChange={(guestId, groupIdValue) => void updateGuest(guestId, { group_id: groupIdValue || null })}
+          groups={groups}
+          onCreateGroup={addGroup}
         />
       )}
     </div>

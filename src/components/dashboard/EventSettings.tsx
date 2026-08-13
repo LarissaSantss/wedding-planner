@@ -39,6 +39,7 @@ import {
   EVENT_STATUS_LABELS,
 } from '../../utils/eventFormat'
 import { MemberPermissionsPanel } from './MemberPermissionsPanel'
+import { GuestGroupsSettings } from './GuestGroupsSettings'
 import { useAuth } from '../../hooks/useAuth'
 
 interface EventSettingsProps {
@@ -502,6 +503,9 @@ export function EventSettings({ event, onSave, onBack }: EventSettingsProps) {
 
           {/* Permissões dos membros (somente owner) */}
           {isOwner && <MemberPermissionsPanel event={event} />}
+
+          {/* Gestão de grupos de convidados */}
+          <GuestGroupsSettings eventId={event.id} />
 
           {/* Compartilhamento: código de acesso e link de convite */}
           <section className="settings-section share-section" aria-labelledby="settings-share-title">

@@ -9,6 +9,7 @@ import {
   createGuest,
   createGuests,
   deleteGuest,
+  updateGuest as updateGuestDb,
   fetchGuestGroups,
   createGuestGroup,
   updateGuestGroup,
@@ -39,7 +40,8 @@ export interface GuestModule {
   }) => Promise<boolean>
   addGuests: (names: string[]) => Promise<number>
   removeGuest: (id: string) => Promise<void>
-  addGroup: (name: string) => Promise<boolean>
+  updateGuest: (id: string, values: Partial<Guest>) => Promise<void>
+  addGroup: (name: string) => Promise<GuestGroup | null>
   renameGroup: (id: string, name: string) => Promise<void>
   removeGroup: (id: string) => Promise<void>
   prioritize: (guestId: string, priority: GuestPriority) => Promise<boolean>
@@ -151,18 +153,27 @@ export function useGuestModule(eventId: string): GuestModule {
     setGuests((prev) => prev.filter((g) => g.id !== id))
   }, [])
 
+  const updateGuest = useCallback(async (id: string, values: Partial<Guest>) => {
+    const { data, error: updateError } = await updateGuestDb(id, values)
+    if (updateError || !data) {
+      setError('Não foi possível atualizar o convidado.')
+      return
+    }
+    setGuests((prev) => prev.map((g) => (g.id === id ? data : g)))
+  }, [])
+
   const addGroup = useCallback(
-    async (name: string): Promise<boolean> => {
+    async (name: string): Promise<GuestGroup | null> => {
       const { data, error: createError } = await createGuestGroup({
         event_id: eventId,
         name,
       })
       if (createError || !data) {
         setError('Não foi possível criar o grupo.')
-        return false
+        return null
       }
       setGroups((prev) => [...prev, data])
-      return true
+      return data
     },
     [eventId],
   )
@@ -211,6 +222,7 @@ export function useGuestModule(eventId: string): GuestModule {
     addGuest,
     addGuests,
     removeGuest,
+    updateGuest,
     addGroup,
     renameGroup,
     removeGroup,

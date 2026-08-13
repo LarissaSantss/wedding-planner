@@ -50,6 +50,27 @@ export type TaskAssigneeRole = 'primary' | 'collaborator'
 /** Papel do usuário na plataforma */
 export type UserRole = 'user' | 'admin'
 
+/** Tipo de notificação do evento */
+export type EventNotificationType =
+  | 'mention'
+  | 'task_assigned'
+  | 'task_owner_changed'
+  | 'task_due_soon'
+  | 'comment'
+
+/** Notificação por usuário dentro de um evento */
+export interface EventNotification {
+  id: string
+  event_id: string
+  user_id: string
+  type: EventNotificationType
+  title: string
+  body: string | null
+  task_id: string | null
+  read: boolean
+  created_at: string
+}
+
 // ========== MÓDULO DE CONVIDADOS ==========
 
 /** Status de RSVP de um convidado */
@@ -451,6 +472,10 @@ export type TaskCommentInsert = Pick<TaskComment, 'task_id' | 'content'> &
 export type TaskAttachmentInsert = Pick<TaskAttachment, 'task_id' | 'filename' | 'storage_path'> &
   Partial<Omit<TaskAttachment, 'id' | 'created_at'>>
 
+/** Dados para criação de uma notificação */
+export type EventNotificationInsert = Pick<EventNotification, 'event_id' | 'user_id' | 'type' | 'title'> &
+  Partial<Omit<EventNotification, 'id' | 'created_at' | 'read'>>
+
 /** Dados para criação de uma despesa */
 export type ExpenseInsert = Pick<Expense, 'description' | 'amount' | 'event_id'> &
   Partial<Omit<Expense, 'id' | 'created_at'>>
@@ -553,6 +578,11 @@ export interface Database {
         Row: TaskActivity
         Insert: Partial<TaskActivity>
         Update: Partial<TaskActivity>
+      }
+      event_notifications: {
+        Row: EventNotification
+        Insert: EventNotificationInsert
+        Update: Partial<EventNotification>
       }
       expenses: {
         Row: Expense

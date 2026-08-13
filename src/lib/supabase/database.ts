@@ -27,6 +27,17 @@ import type {
   BoardColumnInsert,
   TaskCategory,
   TaskCategoryInsert,
+  TaskAssignee,
+  TaskAssigneeRole,
+  TaskSubtask,
+  TaskSubtaskInsert,
+  TaskComment,
+  TaskCommentInsert,
+  TaskAttachment,
+  TaskAttachmentInsert,
+  TaskActivity,
+  EventNotification,
+  EventNotificationInsert,
   Expense,
   ExpenseInsert,
   GiftRegistryItem,
@@ -560,6 +571,151 @@ export async function deleteCategory(id: string): Promise<{ error: Error | null 
   return deleteRecord('task_categories', id)
 }
 
+// ========== OPERAÇÕES ESPECÍFICAS: RESPONSÁVEIS ==========
+
+/** Busca os responsáveis de uma tarefa. */
+export async function fetchTaskAssignees(
+  taskId: string,
+): Promise<QueryListResult<TaskAssignee>> {
+  return fetchWithFilter<TaskAssignee>('task_assignees', { task_id: taskId })
+}
+
+/**
+ * Atribui (ou redefine) um responsável na tarefa.
+ * `role` define se é responsável principal ou colaborador.
+ */
+export async function upsertTaskAssignee(
+  taskId: string,
+  userId: string,
+  role: TaskAssigneeRole,
+): Promise<QueryResult<TaskAssignee>> {
+  const { data, error } = await supabase
+    .from('task_assignees')
+    .upsert({ task_id: taskId, user_id: userId, role }, { onConflict: 'task_id,user_id' })
+    .select()
+    .single()
+
+  return { data: data as TaskAssignee | null, error }
+}
+
+/** Remove um responsável da tarefa. */
+export async function removeTaskAssignee(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('task_assignees', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: SUBTAREFAS ==========
+
+/** Busca as subtarefas de uma tarefa. */
+export async function fetchTaskSubtasks(
+  taskId: string,
+): Promise<QueryListResult<TaskSubtask>> {
+  return fetchWithFilter<TaskSubtask>('task_subtasks', { task_id: taskId }, {
+    orderBy: { column: 'sort_order', ascending: true },
+  })
+}
+
+/** Cria uma subtarefa. */
+export async function createSubtask(
+  values: TaskSubtaskInsert,
+): Promise<QueryResult<TaskSubtask>> {
+  return insertRecord<TaskSubtask>('task_subtasks', values as Record<string, unknown>)
+}
+
+/** Atualiza uma subtarefa. */
+export async function updateSubtask(
+  id: string,
+  values: Partial<TaskSubtask>,
+): Promise<QueryResult<TaskSubtask>> {
+  return updateRecord<TaskSubtask>('task_subtasks', id, values as Record<string, unknown>)
+}
+
+/** Remove uma subtarefa. */
+export async function deleteSubtask(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('task_subtasks', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: COMENTÁRIOS (TAREFAS) ==========
+
+/** Busca os comentários de uma tarefa. */
+export async function fetchTaskComments(
+  taskId: string,
+): Promise<QueryListResult<TaskComment>> {
+  return fetchWithFilter<TaskComment>('task_comments', { task_id: taskId }, {
+    orderBy: { column: 'created_at', ascending: true },
+  })
+}
+
+/** Cria um comentário (com menções) em uma tarefa. */
+export async function createTaskComment(
+  values: TaskCommentInsert,
+): Promise<QueryResult<TaskComment>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { data: null, error: new Error('NOT_AUTHENTICATED') }
+  }
+  return insertRecord<TaskComment>('task_comments', {
+    ...values,
+    user_id: userId,
+    mentions: values.mentions ?? [],
+  } as Record<string, unknown>)
+}
+
+/** Remove um comentário (apenas o próprio autor, por RLS). */
+export async function deleteTaskComment(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('task_comments', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: ANEXOS ==========
+
+/** Busca os anexos de uma tarefa. */
+export async function fetchTaskAttachments(
+  taskId: string,
+): Promise<QueryListResult<TaskAttachment>> {
+  return fetchWithFilter<TaskAttachment>('task_attachments', { task_id: taskId }, {
+    orderBy: { column: 'created_at', ascending: true },
+  })
+}
+
+/** Registra um anexo na tarefa (arquivo já foi enviado ao Storage). */
+export async function createTaskAttachment(
+  values: TaskAttachmentInsert,
+): Promise<QueryResult<TaskAttachment>> {
+  return insertRecord<TaskAttachment>('task_attachments', values as Record<string, unknown>)
+}
+
+/** Remove o registro de anexo. */
+export async function deleteTaskAttachment(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('task_attachments', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: HISTÓRICO (ATIVIDADE) ==========
+
+/** Busca o histórico de atividades de uma tarefa. */
+export async function fetchTaskActivity(
+  taskId: string,
+): Promise<QueryListResult<TaskActivity>> {
+  return fetchWithFilter<TaskActivity>('task_activity', { task_id: taskId }, {
+    orderBy: { column: 'created_at', ascending: false },
+  })
+}
+
+/** Registra uma atividade da tarefa. */
+export async function recordTaskActivity(
+  taskId: string,
+  action: string,
+  metadata: Record<string, unknown> = {},
+): Promise<QueryResult<TaskActivity>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id ?? null
+  return insertRecord<TaskActivity>('task_activity', {
+    task_id: taskId,
+    user_id: userId,
+    action,
+    metadata,
+  } as Record<string, unknown>)
+}
+
 // ========== OPERAÇÕES ESPECÍFICAS: EXPENSES ==========
 
 /**
@@ -867,4 +1023,97 @@ export async function setGuestPriority(
     p_priority: priority,
   })
   return { data: data as Guest | null, error }
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: NOTIFICAÇÕES ==========
+
+/** Busca as notificações do usuário atual (não lidas primeiro). */
+export async function fetchMyNotifications(): Promise<QueryListResult<EventNotification>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { data: [], error: null }
+  }
+  const { data, error } = await supabase
+    .from('event_notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .order('read', { ascending: true })
+    .order('created_at', { ascending: false })
+  return { data: data as EventNotification[] | null, error }
+}
+
+/** Marca uma notificação como lida. */
+export async function markNotificationRead(id: string): Promise<{ error: Error | null }> {
+  const { error } = await supabase
+    .from('event_notifications')
+    .update({ read: true })
+    .eq('id', id)
+  return { error }
+}
+
+/** Marca todas as notificações do usuário como lidas. */
+export async function markAllNotificationsRead(): Promise<{ error: Error | null }> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { error: new Error('NOT_AUTHENTICATED') }
+  }
+  const { error } = await supabase
+    .from('event_notifications')
+    .update({ read: true })
+    .eq('user_id', userId)
+    .eq('read', false)
+  return { error }
+}
+
+/**
+ * Cria uma notificação para um usuário pertencente ao evento.
+ * A RLS garante que o autor pertence ao evento e que o destino é membro.
+ */
+export async function createNotification(
+  values: EventNotificationInsert,
+): Promise<QueryResult<EventNotification>> {
+  return insertRecord<EventNotification>(
+    'event_notifications',
+    values as Record<string, unknown>,
+  )
+}
+
+/**
+ * Cria notificações de menção a partir de `@nome` no conteúdo do comentário.
+ * Resolve a menção contra os membros do evento (por full_name ou email).
+ * Retorna os IDs dos usuários notificados.
+ */
+export async function notifyMentions(
+  eventId: string,
+  taskId: string,
+  content: string,
+  authorName: string,
+  members: Array<{ user_id: string; full_name: string | null; email: string | null }>,
+): Promise<string[]> {
+  const mentions = content.match(/@(\w[\w\s]*)/g) ?? []
+  const notified: string[] = []
+
+  for (const raw of mentions) {
+    const name = raw.slice(1).trim().toLowerCase()
+    const member = members.find((m) => {
+      const full = (m.full_name ?? '').toLowerCase()
+      const email = (m.email ?? '').toLowerCase()
+      return full === name || email === name || full.includes(name)
+    })
+    if (member) {
+      await createNotification({
+        event_id: eventId,
+        user_id: member.user_id,
+        type: 'mention',
+        title: `${authorName} mencionou você`,
+        body: content,
+        task_id: taskId,
+      })
+      notified.push(member.user_id)
+    }
+  }
+
+  return notified
 }
