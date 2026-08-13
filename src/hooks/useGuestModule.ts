@@ -37,7 +37,9 @@ export interface GuestModule {
     phone?: string | null
     group_id?: string | null
     notes?: string | null
-  }) => Promise<boolean>
+    priority?: GuestPriority | null
+    invited_by?: Guest['invited_by']
+  }) => Promise<Guest | null>
   addGuests: (names: string[]) => Promise<number>
   removeGuest: (id: string) => Promise<void>
   updateGuest: (id: string, values: Partial<Guest>) => Promise<void>
@@ -107,7 +109,9 @@ export function useGuestModule(eventId: string): GuestModule {
       phone?: string | null
       group_id?: string | null
       notes?: string | null
-    }): Promise<boolean> => {
+      priority?: GuestPriority | null
+      invited_by?: Guest['invited_by']
+    }): Promise<Guest | null> => {
       const { data, error: createError } = await createGuest({
         event_id: eventId,
         name: values.name,
@@ -115,15 +119,17 @@ export function useGuestModule(eventId: string): GuestModule {
         phone: values.phone ?? null,
         group_id: values.group_id ?? null,
         notes: values.notes ?? null,
+        priority: values.priority ?? null,
+        invited_by: values.invited_by ?? null,
       })
 
       if (createError || !data) {
         setError('Não foi possível adicionar o convidado.')
-        return false
+        return null
       }
 
       setGuests((prev) => [data, ...prev])
-      return true
+      return data
     },
     [eventId],
   )

@@ -17,10 +17,12 @@ import {
   fetchGuestsByEvent,
   fetchExpensesByEvent,
 } from '../../lib/supabase/database'
+import { GuestList } from './GuestList'
 
 interface EventDashboardProps {
   event: Event
   events: Event[]
+  activeSection?: 'dashboard' | 'guests'
   onSelectEvent: (id: string) => void
   onOpenSettings: () => void
   onOpenGuests: () => void
@@ -57,6 +59,7 @@ function pad2(value: number): string {
 export function EventDashboard({
   event,
   events,
+  activeSection = 'dashboard',
   onSelectEvent,
   onOpenSettings,
   onOpenGuests,
@@ -204,11 +207,17 @@ export function EventDashboard({
                 item.id === 'guests' ||
                 item.id === 'tasks' ||
                 item.id === 'settings'
+              const isActive =
+                item.id === 'dashboard'
+                  ? activeSection === 'dashboard'
+                  : item.id === 'guests'
+                    ? activeSection === 'guests'
+                    : false
               return (
                 <button
                   key={item.id}
                   type="button"
-                  className={`sidebar-nav-item${item.id === 'dashboard' ? ' is-active' : ''}${isEnabled ? '' : ' is-disabled'}`}
+                  className={`sidebar-nav-item${isActive ? ' is-active' : ''}${isEnabled ? '' : ' is-disabled'}`}
                   disabled={!isEnabled}
                   onClick={() => handleNav(item.id)}
                 >
@@ -260,6 +269,10 @@ export function EventDashboard({
           </header>
 
           <div className="dashboard-main">
+            {activeSection === 'guests' ? (
+              <GuestList event={event} />
+            ) : (
+            <>
             {/* Hero do evento — primeiro viewport, com fundo fotográfico fosco */}
             <section className="event-hero" aria-label="Resumo do evento">
               {event.cover_image_url && (
@@ -398,6 +411,8 @@ export function EventDashboard({
                 ))}
               </div>
             </section>
+            </>
+            )}
           </div>
         </main>
       </div>

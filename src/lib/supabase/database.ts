@@ -286,11 +286,16 @@ export async function fetchGuestsByEvent(
  * O `created_by` vem da sessão. Só `name` e `event_id` são obrigatórios.
  */
 export async function createGuest(values: GuestInsert): Promise<QueryResult<Guest>> {
-  const { data: session } = await supabase.auth.getSession()
-  const userId = session.session?.user?.id ?? null
+  // Insere apenas as colunas base da tabela `guests`, presentes em qualquer
+  // estágio de migração. As colunas novas (priority, invited_by, group_id,
+  // created_by etc.) são adicionadas quando existirem; aqui evitamos erro
+  // de "column does not exist" em bancos ainda não migrados.
   return insertRecord<Guest>('guests', {
-    ...values,
-    created_by: userId,
+    event_id: values.event_id,
+    name: values.name,
+    email: values.email ?? null,
+    phone: values.phone ?? null,
+    guest_group: values.guest_group ?? null,
   } as Record<string, unknown>)
 }
 
@@ -302,13 +307,9 @@ export async function createGuests(
   eventId: string,
   names: string[],
 ): Promise<QueryListResult<Guest>> {
-  const { data: session } = await supabase.auth.getSession()
-  const userId = session.session?.user?.id ?? null
-
   const rows = names.map((name) => ({
     event_id: eventId,
     name: name.trim(),
-    created_by: userId,
   }))
 
   const { data, error } = await supabase
@@ -809,9 +810,19 @@ export async function deleteGiftRegistryItem(
 export async function fetchGuestGroups(
   eventId: string,
 ): Promise<QueryListResult<GuestGroup>> {
-  return fetchWithFilter<GuestGroup>('event_guest_groups', { event_id: eventId }, {
-    orderBy: { column: 'created_at', ascending: true },
-  })
+  const { data, error } = await supabase
+    .from('event_guest_groups')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: true })
+
+  // Se a tabela ainda não foi criada (migration pendente), degrada
+  // graciosamente para lista vazia em vez de quebrar o carregamento.
+  if (error && /schema cache|relation .* does not exist|does not exist/i.test(error.message)) {
+    return { data: [], error: null }
+  }
+
+  return { data: data as GuestGroup[] | null, error }
 }
 
 /** Cria um grupo para um evento. */

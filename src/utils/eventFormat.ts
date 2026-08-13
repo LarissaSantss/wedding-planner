@@ -17,8 +17,8 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
 
 /** Labels das relações de acompanhantes */
 export const COMPANION_RELATIONSHIP_LABELS: Record<CompanionRelationship, string> = {
-  spouse: 'Cônjuge',
-  partner: 'Parceiro(a)',
+  spouse: 'Esposo(a)',
+  partner: 'Namorado(a)',
   child: 'Filho(a)',
   parent: 'Pai/Mãe',
   friend: 'Amigo(a)',

@@ -15,7 +15,6 @@ import { EventDashboard } from './EventDashboard'
 import { EventSettings } from './EventSettings'
 import { EventCreate } from './EventCreate'
 import { EventJoin } from './EventJoin'
-import { GuestList } from './GuestList'
 import { Kanban } from './Kanban'
 
 type View = 'empty' | 'create' | 'join' | 'dashboard' | 'settings' | 'guests' | 'tasks'
@@ -172,10 +171,6 @@ export function EventView() {
     )
   }
 
-  if (view === 'guests') {
-    return <GuestList event={event} onBack={() => setView('dashboard')} />
-  }
-
   if (view === 'tasks') {
     return <Kanban event={event} onBack={() => setView('dashboard')} />
   }
@@ -184,6 +179,7 @@ export function EventView() {
     <EventDashboard
       event={event}
       events={events}
+      activeSection={view === 'guests' ? 'guests' : 'dashboard'}
       onSelectEvent={handleSelectEvent}
       onOpenSettings={() => setView('settings')}
       onOpenGuests={() => setView('guests')}

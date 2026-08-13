@@ -179,6 +179,7 @@ export interface Guest {
   priority: GuestPriority | null
   notes: string | null
   relationship_to_event: RelationshipToEvent | null
+  invited_by: 'client_1' | 'client_2' | 'both' | null // "Convidado de"
   rsvp_status: RsvpStatus
   plus_one: boolean
   table_number: number | null

@@ -1,14 +1,12 @@
-import { useState } from 'react'
-import type { CSSProperties } from 'react'
-import type { Event, Guest, GuestPriority } from '../../lib/supabase/types'
-import { getThemeStyle } from '../../utils/theme'
+import { useMemo, useState } from 'react'
+import type { Event, Guest, GuestPriority, CompanionRelationship } from '../../lib/supabase/types'
 import { useGuestModule } from '../../hooks/useGuestModule'
 import { GuestDetail } from './GuestDetail'
-import { CreatableGroupSelect } from './CreatableGroupSelect'
+import { COMPANION_RELATIONSHIP_LABELS, COMPANION_RELATIONSHIP_LIST } from '../../utils/eventFormat'
+import { createCompanion, createGuests } from '../../lib/supabase/database'
 
 interface GuestListProps {
   event: Event
-  onBack: () => void
 }
 
 const PRIORITY_OPTIONS: Array<{ value: GuestPriority; label: string }> = [
@@ -17,23 +15,38 @@ const PRIORITY_OPTIONS: Array<{ value: GuestPriority; label: string }> = [
   { value: 3, label: '⭐⭐⭐' },
 ]
 
-function groupName(groups: { id: string; name: string }[], groupId: string | null): string {
-  if (!groupId) return 'Sem grupo'
-  return groups.find((g) => g.id === groupId)?.name ?? 'Sem grupo'
+interface CompanionDraft {
+  name: string
+  relationship: CompanionRelationship
 }
 
-export function GuestList({ event, onBack }: GuestListProps) {
-  const themeStyle = getThemeStyle(
-    event.theme_preset,
-    event.theme_preset === 'custom'
-      ? {
-          primary: event.custom_primary,
-          secondary: event.custom_secondary,
-          accent: event.custom_accent,
-        }
-      : undefined,
-  ) as CSSProperties
+function stars(priority: GuestPriority | null): string {
+  if (priority === 1) return '⭐'
+  if (priority === 2) return '⭐⭐'
+  if (priority === 3) return '⭐⭐⭐'
+  return ''
+}
 
+function invitedByLabel(event: Event, value: Guest['invited_by']): string {
+  const a = event.client_name_1 ?? 'Noiva'
+  const b = event.client_name_2 ?? 'Noivo'
+  if (value === 'client_1') return a
+  if (value === 'client_2') return b
+  if (value === 'both') return `${a} & ${b}`
+  return 'A definir'
+}
+
+function hasPending(guest: Guest): boolean {
+  return (
+    !guest.email ||
+    !guest.phone ||
+    guest.priority === null ||
+    guest.invited_by === null ||
+    !guest.relationship_to_event
+  )
+}
+
+export function GuestList({ event }: GuestListProps) {
   const {
     guests,
     groups,
@@ -41,282 +54,405 @@ export function GuestList({ event, onBack }: GuestListProps) {
     error,
     permissions,
     addGuest,
-    addGuests,
-    removeGuest,
     updateGuest,
     addGroup,
-    prioritize,
   } = useGuestModule(event.id)
 
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [groupId, setGroupId] = useState('')
-  const [adding, setAdding] = useState(false)
-
-  const [filterGroup, setFilterGroup] = useState<string>('all')
   const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<string>('all')
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null)
 
-  const [quickMode, setQuickMode] = useState<'single' | 'bulk'>('single')
+  // Modal
+  const [showAdd, setShowAdd] = useState(false)
+  const [addTab, setAddTab] = useState<'single' | 'bulk'>('single')
+  const [adding, setAdding] = useState(false)
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Single form
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    priority: '',
+    invited_by: '',
+  })
+  const [companionCount, setCompanionCount] = useState(0)
+  const [companions, setCompanions] = useState<CompanionDraft[]>([])
+
+  // Bulk form
   const [bulkText, setBulkText] = useState('')
-  const [bulkCount, setBulkCount] = useState<number | null>(null)
+  const [bulkConfirm, setBulkConfirm] = useState<string[] | null>(null)
 
-  const handleAddGuest = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return
-    setAdding(true)
-    const ok = await addGuest({
-      name: name.trim(),
-      email: email.trim() || null,
-      phone: phone.trim() || null,
-      group_id: groupId || null,
-      notes: null,
+  const indicators = useMemo(() => {
+    const total = guests.length
+    const confirmed = guests.filter((g) => g.rsvp_status === 'confirmed').length
+    const pending = guests.filter((g) => g.rsvp_status === 'pending').length
+    const declined = guests.filter((g) => g.rsvp_status === 'declined').length
+    const triple = guests.filter((g) => g.priority === 3).length
+    const unclassified = guests.filter((g) => g.priority === null).length
+    return { total, confirmed, pending, declined, triple, unclassified }
+  }, [guests])
+
+  const filtered = useMemo(() => {
+    return guests.filter((g) => {
+      if (search && !g.name.toLowerCase().includes(search.toLowerCase())) return false
+      if (filter === 'all') return true
+      if (filter === 'none') return g.priority === null
+      if (filter === '1') return g.priority === 1
+      if (filter === '2') return g.priority === 2
+      if (filter === '3') return g.priority === 3
+      if (filter === 'client_1') return g.invited_by === 'client_1'
+      if (filter === 'client_2') return g.invited_by === 'client_2'
+      if (filter === 'both') return g.invited_by === 'both'
+      return true
     })
-    if (ok) {
-      setName('')
-      setEmail('')
-      setPhone('')
-      setGroupId('')
+  }, [guests, search, filter])
+
+  const openAdd = () => {
+    setForm({ name: '', email: '', phone: '', priority: '', invited_by: '' })
+    setCompanionCount(0)
+    setCompanions([])
+    setBulkText('')
+    setBulkConfirm(null)
+    setFeedback(null)
+    setAddTab('single')
+    setShowAdd(true)
+  }
+
+  const setCount = (next: number) => {
+    const n = Math.max(0, Math.floor(next))
+    setCompanionCount(n)
+    setCompanions((prev) => {
+      const arr = [...prev]
+      if (n > arr.length) {
+        for (let i = arr.length; i < n; i++) {
+          arr.push({ name: '', relationship: 'other' })
+        }
+      } else if (n < arr.length) {
+        // Não remove silenciosamente se houver dados (tratado no submit/arrow)
+        arr.length = n
+      }
+      return arr
+    })
+  }
+
+  const changeCompanion = (index: number, patch: Partial<CompanionDraft>) => {
+    setCompanions((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)))
+  }
+
+  const handleAddSingle = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.name.trim()) return
+    setAdding(true)
+    setFeedback(null)
+
+    const priority =
+      form.priority === '1' || form.priority === '2' || form.priority === '3'
+        ? (Number(form.priority) as GuestPriority)
+        : null
+
+    const guest = await addGuest({
+      name: form.name.trim(),
+      email: form.email.trim() || null,
+      phone: form.phone.trim() || null,
+      group_id: null,
+      notes: null,
+      priority,
+      invited_by:
+        form.invited_by === 'client_1' ||
+        form.invited_by === 'client_2' ||
+        form.invited_by === 'both'
+          ? form.invited_by
+          : null,
+    })
+
+    // Persiste acompanhantes preenchidos (e vazios como pendentes) no Supabase.
+    if (guest) {
+      const drafts = companions.slice(0, companionCount)
+      await Promise.all(
+        drafts.map((c) =>
+          createCompanion({
+            guest_id: guest.id,
+            name: c.name.trim(),
+            relationship: c.relationship,
+          }),
+        ),
+      )
     }
+
     setAdding(false)
+    setShowAdd(false)
   }
 
-  const handlePriority = async (guest: Guest, priority: GuestPriority) => {
-    await prioritize(guest.id, priority)
-    if (selectedGuest?.id === guest.id) {
-      setSelectedGuest({ ...guest, priority })
+  const detectDuplicates = (names: string[]): string[] => {
+    const seen = new Set<string>()
+    const dupes = new Set<string>()
+    for (const n of names) {
+      const key = n.toLowerCase()
+      if (seen.has(key)) dupes.add(n)
+      seen.add(key)
     }
+    return [...dupes]
   }
 
-  const handleBulkAdd = async (e: React.FormEvent) => {
+  const handleBulkSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const names = bulkText
       .split('\n')
-      .map((line) => line.trim())
+      .map((s) => s.trim())
       .filter(Boolean)
 
     if (names.length === 0) return
 
+    const dupes = detectDuplicates(names)
+    if (dupes.length > 0) {
+      setBulkConfirm(dupes)
+      return
+    }
+    void doBulkAdd(names)
+  }
+
+  const doBulkAdd = async (names: string[]) => {
     setAdding(true)
-    const count = await addGuests(names)
-    if (count > 0) {
-      setBulkCount(count)
+    setFeedback(null)
+    const { data, error: createError } = await createGuests(event.id, names)
+    if (createError || !data) {
+      setFeedback({ type: 'error', message: 'Não foi possível adicionar os convidados.' })
+    } else {
+      const failed = names.length - data.length
+      setFeedback({
+        type: 'success',
+        message:
+          failed > 0
+            ? `${data.length} convidados adicionados. ${failed} não puderam ser adicionados.`
+            : `${data.length} convidados adicionados.`,
+      })
       setBulkText('')
-      window.setTimeout(() => setBulkCount(null), 3000)
+      setBulkConfirm(null)
     }
     setAdding(false)
   }
 
-  const filtered = guests.filter((g) => {
-    if (filterGroup === 'none' && g.group_id) return false
-    if (filterGroup !== 'all' && filterGroup !== 'none' && g.group_id !== filterGroup) return false
-    if (search && !g.name.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
-
   return (
-    <div className="dashboard-shell" style={themeStyle}>
-      <header className="dashboard-topbar">
-        <div className="dashboard-brand">
-          <span className="dashboard-brand-mark" aria-hidden="true">👥</span>
-          <span className="dashboard-brand-name">Convidados · {event.title}</span>
+    <div className="guest-section">
+      <header className="guest-header">
+        <div>
+          <h1 className="guest-title">Convidados</h1>
+          <p className="guest-subtitle">
+            Organize sua lista, acompanhe confirmações e decidam juntos quem estará presente.
+          </p>
         </div>
-        <div className="dashboard-controls">
-          <button type="button" className="btn-secondary" onClick={onBack}>
-            Voltar ao painel
-          </button>
-        </div>
+        <button type="button" className="guest-add-btn" onClick={openAdd}>
+          + Adicionar convidado
+        </button>
       </header>
 
-      <main className="dashboard-main">
-        {/* Convidados */}
-        <section className="settings-section" aria-labelledby="guests-title">
-          <h2 id="guests-title" className="settings-section-title">Convidados</h2>
-          <p className="settings-section-desc">
-            Adicione rapidamente, defina grupo e prioridade e clique em um convidado para acompanhantes, votação e discussão.
-          </p>
+      <div className="guest-indicators">
+        <div className="guest-indicator">
+          <span className="guest-indicator-value">{indicators.total}</span>
+          <span className="guest-indicator-label">Total</span>
+        </div>
+        <div className="guest-indicator">
+          <span className="guest-indicator-value is-green">{indicators.confirmed}</span>
+          <span className="guest-indicator-label">Confirmados</span>
+        </div>
+        <div className="guest-indicator">
+          <span className="guest-indicator-value is-muted">{indicators.pending}</span>
+          <span className="guest-indicator-label">Pendentes</span>
+        </div>
+        <div className="guest-indicator">
+          <span className="guest-indicator-value is-red">{indicators.declined}</span>
+          <span className="guest-indicator-label">Recusados</span>
+        </div>
+        <div className="guest-indicator">
+          <span className="guest-indicator-value is-accent">{indicators.triple}</span>
+          <span className="guest-indicator-label">⭐⭐⭐</span>
+        </div>
+        <div className="guest-indicator">
+          <span className="guest-indicator-value is-muted">{indicators.unclassified}</span>
+          <span className="guest-indicator-label">Sem classificação</span>
+        </div>
+      </div>
 
-          <div className="guest-toolbar">
-            <input
-              className="form-control"
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar convidado..."
-            />
-            <select
-              className="form-control"
-              value={filterGroup}
-              onChange={(e) => setFilterGroup(e.target.value)}
-              aria-label="Filtrar por grupo"
-            >
-              <option value="all">Todos os grupos</option>
-              <option value="none">Sem grupo</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
-          </div>
+      <div className="guest-toolbar-row">
+        <input
+          className="form-control guest-search"
+          type="search"
+          placeholder="🔎 Buscar por nome"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="guest-filters">
+          <button type="button" className={`guest-pill${filter === 'all' ? ' is-active' : ''}`} onClick={() => setFilter('all')}>Todos</button>
+          <button type="button" className={`guest-pill${filter === 'client_1' ? ' is-active' : ''}`} onClick={() => setFilter('client_1')}>{event.client_name_1 ?? 'Noiva'}</button>
+          <button type="button" className={`guest-pill${filter === 'client_2' ? ' is-active' : ''}`} onClick={() => setFilter('client_2')}>{event.client_name_2 ?? 'Noivo'}</button>
+          <button type="button" className={`guest-pill${filter === 'both' ? ' is-active' : ''}`} onClick={() => setFilter('both')}>Ambos</button>
+          <button type="button" className={`guest-pill${filter === 'none' ? ' is-active' : ''}`} onClick={() => setFilter('none')}>Sem classificação</button>
+          <button type="button" className={`guest-pill${filter === '3' ? ' is-active' : ''}`} onClick={() => setFilter('3')}>⭐⭐⭐</button>
+          <button type="button" className={`guest-pill${filter === '2' ? ' is-active' : ''}`} onClick={() => setFilter('2')}>⭐⭐</button>
+          <button type="button" className={`guest-pill${filter === '1' ? ' is-active' : ''}`} onClick={() => setFilter('1')}>⭐</button>
+        </div>
+      </div>
 
-          {error && (
-            <p className="auth-error" role="alert" style={{ marginTop: '1rem' }}>
-              ⚠ {error}
-            </p>
-          )}
+      {error && (
+        <p className="auth-error" role="alert" style={{ marginTop: '1rem' }}>
+          ⚠ {error}
+        </p>
+      )}
 
-          {bulkCount !== null && (
-            <p className="auth-success" role="status" style={{ marginTop: '1rem' }}>
-              ✓ {bulkCount} {bulkCount === 1 ? 'convidado adicionado' : 'convidados adicionados'}.
-            </p>
-          )}
+      {loading ? (
+        <div className="state-panel" style={{ minHeight: '200px' }}>
+          <div className="state-spinner" role="status" aria-label="Carregando convidados" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="guest-empty">
+          <p>Nenhum convidado encontrado.</p>
+          <button type="button" className="btn-primary" onClick={openAdd}>
+            + Adicionar convidado
+          </button>
+        </div>
+      ) : (
+        <ul className="guest-card-grid">
+          {filtered.map((guest) => (
+            <li key={guest.id} className="guest-card" onClick={() => setSelectedGuest(guest)}>
+              <div className="guest-card-head">
+                <span className="guest-card-name">{guest.name}</span>
+                {guest.priority && <span className="guest-card-stars">{stars(guest.priority)}</span>}
+              </div>
+              <div className="guest-card-meta">
+                {guest.relationship_to_event && <span className="guest-card-chip">{guest.relationship_to_event}</span>}
+                {guest.invited_by && <span className="guest-card-chip">Convidado de {invitedByLabel(event, guest.invited_by)}</span>}
+              </div>
+              <div className="guest-card-foot">
+                <span className={`guest-status guest-status-${guest.rsvp_status}`}>
+                  {guest.rsvp_status === 'confirmed' ? 'Confirmado' : guest.rsvp_status === 'declined' ? 'Recusado' : 'Pendente'}
+                </span>
+                {hasPending(guest) && (
+                  <span className="guest-pending-badge">Informações pendentes</span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
-          {/* Cadastro rápido */}
-          <div role="tablist" className="quick-add-tabs" aria-label="Forma de adicionar convidados">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={quickMode === 'single'}
-              className={`quick-add-tab${quickMode === 'single' ? ' is-active' : ''}`}
-              onClick={() => setQuickMode('single')}
-            >
-              Um por vez
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={quickMode === 'bulk'}
-              className={`quick-add-tab${quickMode === 'bulk' ? ' is-active' : ''}`}
-              onClick={() => setQuickMode('bulk')}
-            >
-              Colar vários nomes
-            </button>
-          </div>
+      {showAdd && (
+        <div className="drawer-overlay" onClick={() => setShowAdd(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <header className="modal-head">
+              <h2 className="modal-title">Adicionar convidado</h2>
+              <button type="button" className="modal-close" onClick={() => setShowAdd(false)} aria-label="Fechar">×</button>
+            </header>
 
-          {quickMode === 'bulk' ? (
-            <form onSubmit={handleBulkAdd} className="quick-add-bulk">
-              <label className="form-label" htmlFor="bulk-names">
-                Cole um nome por linha
-              </label>
-              <textarea
-                id="bulk-names"
-                className="form-control"
-                rows={3}
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder={'Maria Silva\nJoão Silva\nAna Souza\nCarlos Oliveira'}
-              />
-              <button type="submit" className="btn-primary" disabled={adding || !bulkText.trim()}>
-                {adding ? 'Adicionando...' : 'Adicionar nomes'}
+            <div className="guest-modal-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={addTab === 'single'} className={`guest-modal-tab${addTab === 'single' ? ' is-active' : ''}`} onClick={() => setAddTab('single')}>
+                Individual
               </button>
-            </form>
-          ) : (
-            <form onSubmit={handleAddGuest} className="guest-form-row">
-              <div className="form-field" style={{ flex: '2 1 160px' }}>
-                <label className="form-label" htmlFor="guest-name">Nome completo</label>
-                <input
-                  id="guest-name"
-                  className="form-control"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Maria Silva"
-                />
-              </div>
-              <div className="form-field" style={{ flex: '1 1 140px' }}>
-                <label className="form-label" htmlFor="guest-email">Email</label>
-                <input
-                  id="guest-email"
-                  className="form-control"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Opcional"
-                />
-              </div>
-              <div className="form-field" style={{ flex: '1 1 140px' }}>
-                <label className="form-label" htmlFor="guest-phone">Telefone</label>
-                <input
-                  id="guest-phone"
-                  className="form-control"
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Opcional"
-                />
-              </div>
-              <div className="form-field" style={{ flex: '1 1 160px' }}>
-                <label className="form-label" htmlFor="guest-group">Grupo</label>
-                <CreatableGroupSelect
-                  groups={groups}
-                  value={groupId}
-                  onChange={setGroupId}
-                  onCreate={addGroup}
-                  inputId="guest-group"
-                />
-              </div>
-              <div style={{ alignSelf: 'flex-end' }}>
-                <button type="submit" className="btn-primary" disabled={adding || !name.trim()}>
-                  {adding ? 'Adicionando...' : 'Adicionar'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {loading ? (
-            <div className="state-panel" style={{ minHeight: '200px' }}>
-              <div className="state-spinner" role="status" aria-label="Carregando convidados" />
+              <button type="button" role="tab" aria-selected={addTab === 'bulk'} className={`guest-modal-tab${addTab === 'bulk' ? ' is-active' : ''}`} onClick={() => setAddTab('bulk')}>
+                + Adicionar vários convidados
+              </button>
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="guest-list-empty">Nenhum convidado encontrado.</div>
-          ) : (
-            <ul className="guest-list">
-              {filtered.map((guest) => (
-                <li key={guest.id} className="guest-item">
-                  <div className="guest-item-info">
-                    <span className="guest-item-name">
-                      {guest.priority ? PRIORITY_OPTIONS.find((p) => p.value === guest.priority)?.label + ' ' : ''}
-                      {guest.name}
-                    </span>
-                    <span className="guest-item-meta">
-                      {groupName(groups, guest.group_id)}
-                      {guest.email ? ` · ${guest.email}` : ''}
-                    </span>
+
+            {addTab === 'single' ? (
+              <form onSubmit={handleAddSingle} className="modal-form">
+                <div className="form-field">
+                  <label className="form-label" htmlFor="g-name">Nome completo *</label>
+                  <input id="g-name" className="form-control" type="text" autoFocus value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Ex: Maria Silva" required />
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="g-email">E-mail</label>
+                  <input id="g-email" className="form-control" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Opcional" />
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="g-phone">Telefone</label>
+                  <input id="g-phone" className="form-control" type="text" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Opcional" />
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="g-priority">Prioridade</label>
+                  <select id="g-priority" className="form-control" value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}>
+                    <option value="">A definir</option>
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <option key={p.value} value={String(p.value)}>{p.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="g-invited">Convidado de</label>
+                  <select id="g-invited" className="form-control" value={form.invited_by} onChange={(e) => setForm((f) => ({ ...f, invited_by: e.target.value }))}>
+                    <option value="">Ainda não definido</option>
+                    <option value="client_1">{event.client_name_1 ?? 'Noiva'}</option>
+                    <option value="client_2">{event.client_name_2 ?? 'Noivo'}</option>
+                    <option value="both">Ambos</option>
+                  </select>
+                </div>
+
+                <div className="companion-stepper-block">
+                  <span className="form-label">Acompanhantes</span>
+                  <div className="companion-stepper">
+                    <button type="button" className="stepper-arrow" aria-label="Aumentar acompanhantes" onClick={() => setCount(companionCount + 1)}>▲</button>
+                    <input
+                      className="stepper-value"
+                      type="number"
+                      min={0}
+                      value={companionCount}
+                      onChange={(e) => setCount(Number(e.target.value) || 0)}
+                      aria-label="Quantidade de acompanhantes"
+                    />
+                    <button type="button" className="stepper-arrow" aria-label="Diminuir acompanhantes" onClick={() => setCount(companionCount - 1)}>▼</button>
                   </div>
-                  <div className="guest-item-actions">
-                    {permissions.can_prioritize && (
-                      <select
-                        className="form-control"
-                        value={guest.priority ?? ''}
-                        aria-label={`Prioridade de ${guest.name}`}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          if (val) void handlePriority(guest, Number(val) as GuestPriority)
-                        }}
-                      >
-                        <option value="">—</option>
-                        {PRIORITY_OPTIONS.map((p) => (
-                          <option key={p.value} value={p.value}>{p.label}</option>
-                        ))}
-                      </select>
-                    )}
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => setSelectedGuest(guest)}
-                    >
-                      Detalhes
-                    </button>
-                    <button type="button" className="btn-secondary" onClick={() => void removeGuest(guest.id)}>
-                      Remover
-                    </button>
+                </div>
+
+                {companions.map((c, i) => (
+                  <div key={i} className="companion-draft">
+                    <span className="companion-draft-title">Acompanhante {i + 1}</span>
+                    <input className="form-control" type="text" value={c.name} onChange={(e) => changeCompanion(i, { name: e.target.value })} placeholder="Nome completo" />
+                    <select className="form-control" value={c.relationship} onChange={(e) => changeCompanion(i, { relationship: e.target.value as CompanionRelationship })} aria-label={`Relação do acompanhante ${i + 1}`}>
+                      {COMPANION_RELATIONSHIP_LIST.map((rel) => (
+                        <option key={rel} value={rel}>{COMPANION_RELATIONSHIP_LABELS[rel]}</option>
+                      ))}
+                    </select>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </main>
+                ))}
+
+                <div className="modal-actions">
+                  <button type="button" className="btn-secondary" onClick={() => setShowAdd(false)}>Cancelar</button>
+                  <button type="submit" className="btn-primary" disabled={adding || !form.name.trim()}>{adding ? 'Adicionando...' : 'Adicionar'}</button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleBulkSubmit} className="modal-form">
+                <p className="modal-desc">Cole ou digite um nome por linha. Apenas o nome é obrigatório.</p>
+                <textarea className="form-control" rows={6} value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={'Maria Silva\nJoão Souza\nAna Oliveira\nCarlos Santos'} />
+
+                {bulkConfirm && (
+                  <div className="bulk-dupe-warning" role="alert">
+                    <p>Encontramos nomes duplicados:</p>
+                    <ul>{bulkConfirm.map((d) => <li key={d}>{d}</li>)}</ul>
+                    <p>Deseja continuar?</p>
+                    <div className="modal-actions">
+                      <button type="button" className="btn-secondary" onClick={() => setBulkConfirm(null)}>Cancelar</button>
+                      <button type="button" className="btn-primary" onClick={() => { const names = bulkText.split('\n').map(s => s.trim()).filter(Boolean); setBulkConfirm(null); void doBulkAdd(names) }}>Continuar</button>
+                    </div>
+                  </div>
+                )}
+
+                {feedback && (
+                  <p className={feedback.type === 'success' ? 'auth-success' : 'auth-error'} role="status">
+                    {feedback.message}
+                  </p>
+                )}
+
+                {!bulkConfirm && (
+                  <div className="modal-actions">
+                    <button type="button" className="btn-secondary" onClick={() => setShowAdd(false)}>Cancelar</button>
+                    <button type="submit" className="btn-primary" disabled={adding || !bulkText.trim()}>{adding ? 'Adicionando convidados...' : 'Adicionar convidados'}</button>
+                  </div>
+                )}
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {selectedGuest && (
         <GuestDetail
@@ -325,7 +461,7 @@ export function GuestList({ event, onBack }: GuestListProps) {
           canVote={permissions.can_vote}
           canComment={permissions.can_comment}
           onClose={() => setSelectedGuest(null)}
-          onGroupChange={(guestId, groupIdValue) => void updateGuest(guestId, { group_id: groupIdValue || null })}
+          onGroupChange={(id, groupId) => void updateGuest(id, { group_id: groupId || null })}
           groups={groups}
           onCreateGroup={addGroup}
         />
