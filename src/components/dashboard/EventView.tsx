@@ -1,3 +1,4 @@
+
 /*
   DIRECTION CONTRACT - EVENT VIEW (surface: EventView, mode: Operate)
   THESIS: Orquestrador das duas superficies do evento - conecta o usuario
@@ -12,18 +13,16 @@ import { getThemeStyle } from '../../utils/theme'
 import { AuthScreen } from '../auth/AuthScreen'
 import type { EventUpdate } from '../../lib/supabase/types'
 import { EventDashboard } from './EventDashboard'
-import { EventSettings } from './EventSettings'
 import { EventCreate } from './EventCreate'
 import { EventJoin } from './EventJoin'
-import { Kanban } from './Kanban'
 
-type View = 'empty' | 'create' | 'join' | 'dashboard' | 'settings' | 'guests' | 'tasks'
+type View = 'empty' | 'create' | 'join' | 'dashboard' | 'settings' | 'guests' | 'tasks' | 'tables'
 
 const DEFAULT_THEME_STYLE = getThemeStyle('rose-gold') as CSSProperties
 
 export function EventView() {
   const { user, loading: authLoading } = useAuth()
-  const { event, events, loading: eventLoading, error, refresh, selectEvent, saveEvent } =
+  const { event, events, loading: eventLoading, error, refresh, selectEvent, saveEvent, deleteEvent } =
     useEvent()
 
   // Código de convite vindo da URL (?code=XXXX), lido uma única vez
@@ -140,10 +139,6 @@ export function EventView() {
     setView('dashboard')
   }
 
-  const handleSave = (id: string, values: Parameters<typeof saveEvent>[1]) => {
-    return saveEvent(id, values)
-  }
-
   const handleSaveEvent = async (values: EventUpdate) => {
     await saveEvent(event.id, values)
   }
@@ -161,30 +156,32 @@ export function EventView() {
     )
   }
 
-  if (view === 'settings') {
-    return (
-      <EventSettings
-        event={event}
-        onSave={handleSave}
-        onBack={() => setView('dashboard')}
-      />
-    )
-  }
-
-  if (view === 'tasks') {
-    return <Kanban event={event} onBack={() => setView('dashboard')} />
-  }
 
   return (
     <EventDashboard
       event={event}
       events={events}
-      activeSection={view === 'guests' ? 'guests' : 'dashboard'}
+      activeSection={
+        view === 'guests'
+          ? 'guests'
+          : view === 'tasks'
+            ? 'tasks'
+            : view === 'settings'
+              ? 'settings'
+              : view === 'tables'
+                ? 'tables'
+                : 'dashboard'
+      }
       onSelectEvent={handleSelectEvent}
+      onOpenDashboard={() => setView('dashboard')}
       onOpenSettings={() => setView('settings')}
       onOpenGuests={() => setView('guests')}
       onOpenTasks={() => setView('tasks')}
+      onOpenTables={() => setView('tables')}
       onSaveEvent={handleSaveEvent}
+      onDeleteEvent={(id) => {
+        void deleteEvent(id)
+      }}
     />
   )
 }

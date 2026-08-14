@@ -207,6 +207,60 @@ export interface GuestCompanion {
   updated_at: string
 }
 
+// Papel/categoria customizável do evento (Padrinho, Dama de Honra, etc.)
+export interface GuestRole {
+  id: string
+  event_id: string
+  name: string
+  is_special: boolean
+  created_at: string
+}
+
+// Status de aprovação do casal por atribuição de papel
+export type GuestRoleVoteStatus = 'pending' | 'approved' | 'rejected'
+
+// Atribui um papel a um convidado OU a um acompanhante (exatamente um)
+export interface GuestRoleAssignment {
+  id: string
+  event_id: string
+  role_id: string
+  guest_id: string | null
+  companion_id: string | null
+  relationship_to_event: string | null
+  created_at: string
+}
+
+// Voto de um anfitrião/membro sobre uma atribuição de papel
+export interface GuestRoleVote {
+  id: string
+  event_id: string
+  assignment_id: string
+  user_id: string
+  status: GuestRoleVoteStatus
+  created_at: string
+  updated_at: string
+}
+
+// Mesa de assentos
+export interface EventTable {
+  id: string
+  event_id: string
+  name: string
+  capacity: number
+  location: string | null
+  created_at: string
+}
+
+// Alocação de um convidado ou acompanhante em uma mesa
+export interface EventTableGuest {
+  id: string
+  event_id: string
+  table_id: string
+  guest_id: string | null
+  companion_id: string | null
+  created_at: string
+}
+
 // Voto de um organizador sobre um convidado
 export interface GuestVote {
   id: string
@@ -473,6 +527,22 @@ export type TaskCommentInsert = Pick<TaskComment, 'task_id' | 'content'> &
 export type TaskAttachmentInsert = Pick<TaskAttachment, 'task_id' | 'filename' | 'storage_path'> &
   Partial<Omit<TaskAttachment, 'id' | 'created_at'>>
 
+/** Dados para criação de um papel */
+export type GuestRoleInsert = Pick<GuestRole, 'name' | 'event_id'> &
+  Partial<Omit<GuestRole, 'id' | 'created_at'>>
+
+/** Dados para criação de uma atribuição de papel */
+export type GuestRoleAssignmentInsert = Pick<GuestRoleAssignment, 'event_id' | 'role_id'> &
+  Partial<Omit<GuestRoleAssignment, 'id' | 'created_at'>>
+
+/** Dados para criação de uma mesa */
+export type EventTableInsert = Pick<EventTable, 'name' | 'event_id'> &
+  Partial<Omit<EventTable, 'id' | 'created_at'>>
+
+/** Dados para criação de uma alocação */
+export type EventTableGuestInsert = Pick<EventTableGuest, 'event_id' | 'table_id'> &
+  Partial<Omit<EventTableGuest, 'id' | 'created_at'>>
+
 /** Dados para criação de uma notificação */
 export type EventNotificationInsert = Pick<EventNotification, 'event_id' | 'user_id' | 'type' | 'title'> &
   Partial<Omit<EventNotification, 'id' | 'created_at' | 'read'>>
@@ -524,6 +594,31 @@ export interface Database {
         Row: GuestComment
         Insert: GuestCommentInsert
         Update: Partial<GuestComment>
+      }
+      guest_roles: {
+        Row: GuestRole
+        Insert: GuestRoleInsert
+        Update: Partial<GuestRole>
+      }
+      guest_role_assignments: {
+        Row: GuestRoleAssignment
+        Insert: GuestRoleAssignmentInsert
+        Update: Partial<GuestRoleAssignment>
+      }
+      guest_role_votes: {
+        Row: GuestRoleVote
+        Insert: Partial<GuestRoleVote>
+        Update: Partial<GuestRoleVote>
+      }
+      event_tables: {
+        Row: EventTable
+        Insert: EventTableInsert
+        Update: Partial<EventTable>
+      }
+      event_table_guests: {
+        Row: EventTableGuest
+        Insert: EventTableGuestInsert
+        Update: Partial<EventTableGuest>
       }
       event_members: {
         Row: EventMember

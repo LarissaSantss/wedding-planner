@@ -29,6 +29,26 @@ export const COMPANION_RELATIONSHIP_LIST = Object.keys(
   COMPANION_RELATIONSHIP_LABELS,
 ) as CompanionRelationship[]
 
+/** Opções de grau de parentesco/relação com o casamento (valor = rótulo). */
+export const GUEST_RELATIONSHIP_OPTIONS = [
+  'Mãe da noiva',
+  'Pai da noiva',
+  'Mãe do noivo',
+  'Pai do noivo',
+  'Irmã da noiva',
+  'Irmão da noiva',
+  'Irmã do noivo',
+  'Irmão do noivo',
+  'Padrinho',
+  'Madrinha',
+  'Familiar da noiva',
+  'Familiar do noivo',
+  'Amigo da noiva',
+  'Amigo do noivo',
+  'Colega de trabalho',
+  'Outro',
+] as const
+
 /** Emoji/ícone por tipo de evento (usado como marca visual na interface) */
 export const EVENT_TYPE_ICONS: Record<EventType, string> = {
   wedding: '💍',

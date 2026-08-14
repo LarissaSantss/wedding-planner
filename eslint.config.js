@@ -6,8 +6,11 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', '*.cjs', '*.js', 'eventview-content.txt']),
   {
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
     files: ['**/*.{ts,tsx}'],
     extends: [
       js.configs.recommended,

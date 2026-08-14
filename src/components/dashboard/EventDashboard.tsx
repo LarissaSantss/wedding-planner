@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import type { Event, EventUpdate } from '../../lib/supabase/types'
+import type {
+  Event,
+  EventUpdate,
+  Task,
+  TaskPriority,
+  Guest,
+  Expense,
+  Vendor,
+} from '../../lib/supabase/types'
 import { getThemeStyle } from '../../utils/theme'
 import {
   EVENT_TYPE_LABELS,
   EVENT_TYPE_ICONS,
   EVENT_STATUS_LABELS,
   formatCurrency,
-  formatNumber,
   formatDate,
   buildDateDiff,
   getCoupleLabel,
@@ -16,18 +23,28 @@ import { uploadEventCover } from '../../lib/supabase/storage'
 import {
   fetchGuestsByEvent,
   fetchExpensesByEvent,
+  fetchTasksByEvent,
+  fetchVendorsByEvent,
+  fetchEventMembers,
+  updateTask,
 } from '../../lib/supabase/database'
 import { GuestList } from './GuestList'
+import { Kanban } from './Kanban'
+import { EventSettings } from './EventSettings'
+import { SeatingChart } from './SeatingChart'
 
 interface EventDashboardProps {
   event: Event
   events: Event[]
-  activeSection?: 'dashboard' | 'guests'
+  activeSection?: 'dashboard' | 'guests' | 'tasks' | 'settings' | 'tables'
   onSelectEvent: (id: string) => void
+  onOpenDashboard: () => void
   onOpenSettings: () => void
   onOpenGuests: () => void
   onOpenTasks: () => void
+  onOpenTables: () => void
   onSaveEvent: (values: EventUpdate) => Promise<void>
+  onDeleteEvent: (id: string) => void
 }
 
 const MODULES = [
@@ -41,6 +58,7 @@ const MODULES = [
 const SIDEBAR_NAV = [
   { id: 'dashboard', icon: '🏠', label: 'Painel' },
   { id: 'guests', icon: '👥', label: 'Convidados' },
+  { id: 'tables', icon: '🪑', label: 'Mesas' },
   { id: 'vendors', icon: '🤝', label: 'Fornecedores' },
   { id: 'tasks', icon: '✅', label: 'Tarefas' },
   { id: 'expenses', icon: '💰', label: 'Orçamento' },
@@ -48,23 +66,52 @@ const SIDEBAR_NAV = [
   { id: 'settings', icon: '⚙️', label: 'Configurações' },
 ] as const
 
-function pad2(value: number): string {
-  return String(value).padStart(2, '0')
+interface Member {
+  user_id: string
+  full_name: string | null
+  email: string | null
+}
+
+interface DashboardData {
+  guests: Guest[]
+  tasks: Task[]
+  expenses: Expense[]
+  vendors: Vendor[]
+  members: Member[]
+}
+
+const PRIORITY_BADGE: Record<TaskPriority, { label: string; className: string }> = {
+  high: { label: 'Urgent', className: 'task-priority-urgent' },
+  medium: { label: 'Medium', className: 'task-priority-medium' },
+  low: { label: 'Low', className: 'task-priority-low' },
+}
+
+function initials(name: string | null | undefined, email: string | null | undefined): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/)
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    return name.trim().slice(0, 2).toUpperCase()
+  }
+  if (email) return email.slice(0, 2).toUpperCase()
+  return '?'
 }
 
 /**
- * Dashboard principal com menu lateral retrátil, foto de capa do casal,
- * contador em anos/meses/dias e cards de visão geral com dados reais.
+ * Dashboard principal do LUNA com KPIs reais (tarefas, convidados, orçamento
+ * e equipe), próximas tarefas pendentes e resumo financeiro.
  */
 export function EventDashboard({
   event,
   events,
   activeSection = 'dashboard',
   onSelectEvent,
+  onOpenDashboard,
   onOpenSettings,
   onOpenGuests,
   onOpenTasks,
+  onOpenTables,
   onSaveEvent,
+  onDeleteEvent,
 }: EventDashboardProps) {
   const themeStyle = useMemo<CSSProperties>(
     () =>
@@ -83,67 +130,106 @@ export function EventDashboard({
 
   const dateDiff = useMemo(() => buildDateDiff(event.date), [event.date])
   const coupleText = getCoupleLabel(event)
-  const hasDate = Boolean(event.date)
+
+  const countdownText = dateDiff
+    ? dateDiff.years > 0
+      ? `${dateDiff.years} ${dateDiff.years === 1 ? 'ano' : 'anos'} e ${dateDiff.days} ${
+          dateDiff.days === 1 ? 'dia' : 'dias'
+        } para o grande dia`
+      : dateDiff.months > 0
+        ? `${dateDiff.months} ${dateDiff.months === 1 ? 'mês' : 'meses'} e ${dateDiff.days} ${
+            dateDiff.days === 1 ? 'dia' : 'dias'
+          } para o grande dia`
+        : `${dateDiff.days} ${dateDiff.days === 1 ? 'dia' : 'dias'} para o grande dia`
+    : null
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
 
-  const [guestCount, setGuestCount] = useState(0)
-  const [confirmedCount, setConfirmedCount] = useState(0)
-  const [spent, setSpent] = useState(0)
+  const [data, setData] = useState<DashboardData>({
+    guests: [],
+    tasks: [],
+    expenses: [],
+    vendors: [],
+    members: [],
+  })
+
+  const loadData = async () => {
+    const [guests, tasks, expenses, vendors, members] = await Promise.allSettled([
+      fetchGuestsByEvent(event.id),
+      fetchTasksByEvent(event.id, { orderBy: { column: 'due_date', ascending: true } }),
+      fetchExpensesByEvent(event.id),
+      fetchVendorsByEvent(event.id),
+      fetchEventMembers(event.id),
+    ])
+
+    setData({
+      guests: guests.status === 'fulfilled' ? (guests.value.data ?? []) : [],
+      tasks: tasks.status === 'fulfilled' ? (tasks.value.data ?? []) : [],
+      expenses: expenses.status === 'fulfilled' ? (expenses.value.data ?? []) : [],
+      vendors: vendors.status === 'fulfilled' ? (vendors.value.data ?? []) : [],
+      members: members.status === 'fulfilled' ? (members.value.data as Member[] ?? []) : [],
+    })
+  }
 
   useEffect(() => {
-    let mounted = true
-    void (async () => {
-      const [guestsRes, expensesRes] = await Promise.all([
-        fetchGuestsByEvent(event.id),
-        fetchExpensesByEvent(event.id),
-      ])
-      if (!mounted) return
-
-      const guests = guestsRes.data ?? []
-      setGuestCount(guests.length)
-      setConfirmedCount(guests.filter((g) => g.rsvp_status === 'confirmed').length)
-
-      const expenses = expensesRes.data ?? []
-      const total = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
-      setSpent(total)
-    })()
-    return () => {
-      mounted = false
-    }
+    void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.id])
 
-  const handlePickPhoto = () => {
-    fileInputRef.current?.click()
-  }
+  /* ---------- KPIs ---------- */
+  const totalTasks = data.tasks.length
+  const completedTasks = data.tasks.filter((t) => t.completed).length
+  const taskProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
+  const totalGuests = data.guests.length
+  const confirmedGuests = data.guests.filter((g) => g.rsvp_status === 'confirmed').length
+  const pendingGuests = data.guests.filter((g) => g.rsvp_status === 'pending').length
+
+  const budget = event.budget ?? 0
+  const totalPaid = data.expenses.reduce((sum, e) => sum + (e.paid ? Number(e.amount) || 0 : 0), 0)
+  const budgetPercent = budget > 0 ? Math.min(100, Math.round((totalPaid / budget) * 100)) : 0
+
+  /* ---------- Financeiro ---------- */
+  const totalContratado = data.vendors
+    .filter((v) => v.status === 'contracted')
+    .reduce((sum, v) => sum + (Number(v.cost) || 0), 0)
+  const saldoPendente = Math.max(0, totalContratado - totalPaid)
+
+  /* ---------- Tarefas pendentes ---------- */
+  const pendingTasks = data.tasks.filter((t) => !t.completed).slice(0, 5)
+
+  const handlePickPhoto = () => fileInputRef.current?.click()
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-
     setUploading(true)
     setUploadError(null)
     const { url, error } = await uploadEventCover(event.id, file)
-    if (error) {
-      setUploadError('Não foi possível enviar a foto. Tente novamente.')
-    } else if (url) {
-      await onSaveEvent({ cover_image_url: url })
-    }
+    if (error) setUploadError('Não foi possível enviar a foto. Tente novamente.')
+    else if (url) await onSaveEvent({ cover_image_url: url })
     setUploading(false)
   }
 
+  const toggleTask = async (task: Task) => {
+    setData((prev) => ({
+      ...prev,
+      tasks: prev.tasks.map((t) => (t.id === task.id ? { ...t, completed: !t.completed } : t)),
+    }))
+    await updateTask(task.id, { completed: !task.completed })
+  }
+
   const handleNav = (id: (typeof SIDEBAR_NAV)[number]['id']) => {
-    if (id === 'guests') void onOpenGuests()
+    if (id === 'dashboard') void onOpenDashboard()
+    else if (id === 'guests') void onOpenGuests()
+    else if (id === 'tables') void onOpenTables()
     else if (id === 'tasks') void onOpenTasks()
     else if (id === 'settings') void onOpenSettings()
   }
-
-  const budget = event.budget ?? 0
-  const budgetPercent = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : null
 
   return (
     <div className="dashboard-shell" style={themeStyle}>
@@ -157,7 +243,6 @@ export function EventDashboard({
       />
 
       <div className={`app-layout${collapsed ? ' is-collapsed' : ''}`}>
-        {/* ===================== SIDEBAR ===================== */}
         <aside className={`event-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Menu do evento">
           <button
             type="button"
@@ -171,29 +256,16 @@ export function EventDashboard({
           </button>
 
           <div className="sidebar-profile">
-            <button
-              type="button"
-              className="sidebar-avatar-wrap"
-              onClick={handlePickPhoto}
-              disabled={uploading}
-              aria-label="Alterar foto de perfil do evento"
-            >
+            <button type="button" className="sidebar-avatar-wrap" onClick={handlePickPhoto} disabled={uploading} aria-label="Alterar foto de perfil do evento">
               {event.cover_image_url ? (
-                <img
-                  className="sidebar-avatar"
-                  src={event.cover_image_url}
-                  alt="Foto de perfil do evento"
-                />
+                <img className="sidebar-avatar" src={event.cover_image_url} alt="Foto de perfil do evento" />
               ) : (
                 <span className="sidebar-avatar sidebar-avatar-fallback" aria-hidden="true">
                   {EVENT_TYPE_ICONS[event.event_type]}
                 </span>
               )}
-              <span className="sidebar-avatar-badge" aria-hidden="true">
-                {uploading ? '⏳' : '📷'}
-              </span>
+              <span className="sidebar-avatar-badge" aria-hidden="true">{uploading ? '⏳' : '📷'}</span>
             </button>
-
             <h2 className="sidebar-event-name">{event.title}</h2>
             <p className="sidebar-event-type">
               {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]}
@@ -205,6 +277,7 @@ export function EventDashboard({
               const isEnabled =
                 item.id === 'dashboard' ||
                 item.id === 'guests' ||
+                item.id === 'tables' ||
                 item.id === 'tasks' ||
                 item.id === 'settings'
               const isActive =
@@ -212,7 +285,13 @@ export function EventDashboard({
                   ? activeSection === 'dashboard'
                   : item.id === 'guests'
                     ? activeSection === 'guests'
-                    : false
+                  : item.id === 'tasks'
+                      ? activeSection === 'tasks'
+                      : item.id === 'settings'
+                        ? activeSection === 'settings'
+                        : item.id === 'tables'
+                          ? activeSection === 'tables'
+                          : false
               return (
                 <button
                   key={item.id}
@@ -221,9 +300,7 @@ export function EventDashboard({
                   disabled={!isEnabled}
                   onClick={() => handleNav(item.id)}
                 >
-                  <span className="sidebar-nav-icon" aria-hidden="true">
-                    {item.icon}
-                  </span>
+                  <span className="sidebar-nav-icon" aria-hidden="true">{item.icon}</span>
                   <span className="sidebar-nav-label">{item.label}</span>
                   {!isEnabled && <span className="sidebar-nav-soon">em breve</span>}
                 </button>
@@ -233,185 +310,210 @@ export function EventDashboard({
 
           {events.length > 1 && (
             <div className="sidebar-event-switch">
-              <label className="form-label" htmlFor="sidebar-event-select">
-                Trocar evento
-              </label>
-              <select
-                id="sidebar-event-select"
-                className="form-control"
-                value={event.id}
-                onChange={(e) => onSelectEvent(e.target.value)}
-              >
+              <label className="form-label" htmlFor="sidebar-event-select">Trocar evento</label>
+              <select id="sidebar-event-select" className="form-control" value={event.id} onChange={(e) => onSelectEvent(e.target.value)}>
                 {events.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {EVENT_TYPE_ICONS[e.event_type]} {e.title}
+                    {e.title} · {formatDate(e.date)} · {e.code}
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void onDeleteEvent(event.id)}
+              >
+                Excluir evento atual
+              </button>
             </div>
           )}
         </aside>
 
-        {/* ===================== MAIN ===================== */}
         <main className="event-main">
           <header className="dashboard-topbar">
             <div className="dashboard-brand">
-              <span className="dashboard-brand-mark" aria-hidden="true">
-                {EVENT_TYPE_ICONS[event.event_type]}
-              </span>
+              <span className="dashboard-brand-mark" aria-hidden="true">{EVENT_TYPE_ICONS[event.event_type]}</span>
               <span className="dashboard-brand-name">Wedding & Events Planner</span>
             </div>
             <div className="dashboard-controls">
-              <button type="button" className="btn-secondary" onClick={onOpenSettings}>
-                Configurações
-              </button>
+              <button type="button" className="btn-secondary" onClick={onOpenSettings}>Configurações</button>
             </div>
           </header>
 
           <div className="dashboard-main">
             {activeSection === 'guests' ? (
               <GuestList event={event} />
+            ) : activeSection === 'tasks' ? (
+              <Kanban event={event} />
+            ) : activeSection === 'settings' ? (
+              <EventSettings
+                event={event}
+                onSave={async (_id, values) => {
+                  await onSaveEvent(values)
+                  return { error: null }
+                }}
+              />
+            ) : activeSection === 'tables' ? (
+              <SeatingChart event={event} />
             ) : (
-            <>
-            {/* Hero do evento — primeiro viewport, com fundo fotográfico fosco */}
-            <section className="event-hero" aria-label="Resumo do evento">
-              {event.cover_image_url && (
-                <div
-                  className="event-hero-bg"
-                  style={{ backgroundImage: `url(${event.cover_image_url})` }}
-                  aria-hidden="true"
-                />
-              )}
-
-              <span className="event-hero-badge">
-                {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]} ·{' '}
-                {EVENT_STATUS_LABELS[event.status]}
-              </span>
-
-              <h1 className="event-hero-title">
-                {EVENT_TYPE_LABELS[event.event_type]} {coupleText ?? event.title}
-              </h1>
-              {coupleText && <p className="event-hero-couple">{event.title}</p>}
-
-              <button
-                type="button"
-                className="hero-photo-btn"
-                onClick={handlePickPhoto}
-                disabled={uploading}
-              >
-                {uploading ? 'Enviando...' : event.cover_image_url ? '📷 Trocar foto' : '📷 Adicionar foto'}
-              </button>
-            </section>
-
-            {/* Contador em cartões delicados (anos / meses / dias) */}
-            {hasDate && dateDiff && (
-              <section className="countdown-cards" aria-label="Contagem regressiva">
-                <article className="countdown-card">
-                  <span className="countdown-card-number">{pad2(dateDiff.years)}</span>
-                  <span className="countdown-card-label">
-                    {dateDiff.years === 1 ? 'ano' : 'anos'}
-                  </span>
-                </article>
-                <article className="countdown-card">
-                  <span className="countdown-card-number">{pad2(dateDiff.months)}</span>
-                  <span className="countdown-card-label">
-                    {dateDiff.months === 1 ? 'mês' : 'meses'}
-                  </span>
-                </article>
-                <article className="countdown-card">
-                  <span className="countdown-card-number">{pad2(dateDiff.days)}</span>
-                  <span className="countdown-card-label">
-                    {dateDiff.days === 1 ? 'dia' : 'dias'}
-                  </span>
-                </article>
-              </section>
-            )}
-
-            {uploadError && (
-              <p className="auth-error" role="alert">
-                ⚠ {uploadError}
-              </p>
-            )}
-
-            {/* Cards de acesso rápido */}
-            <section className="overview-cards" aria-label="Visão geral do projeto">
-              <article className="overview-card">
-                <span className="overview-card-icon" aria-hidden="true">📅</span>
-                <div className="overview-card-body">
-                  <p className="overview-card-label">Data do Evento</p>
-                  <p className="overview-card-value">{formatDate(event.date)}</p>
-                  <p className="overview-card-hint">
-                    {event.location ? `📍 ${event.location}` : 'Local a definir'}
-                  </p>
-                </div>
-              </article>
-
-              <article className="overview-card">
-                <span className="overview-card-icon" aria-hidden="true">💰</span>
-                <div className="overview-card-body">
-                  <p className="overview-card-label">Orçamento / Financeiro</p>
-                  <p className="overview-card-value">
-                    {formatCurrency(spent)}
-                    {budget > 0 && (
-                      <span className="overview-card-muted"> de {formatCurrency(budget)}</span>
-                    )}
-                  </p>
-                  {budgetPercent !== null ? (
-                    <div className="overview-progress" role="progressbar" aria-valuenow={budgetPercent} aria-valuemin={0} aria-valuemax={100}>
-                      <span className="overview-progress-fill" style={{ width: `${budgetPercent}%` }} />
-                    </div>
-                  ) : (
-                    <p className="overview-card-hint">Defina o teto do orçamento no painel</p>
+              <>
+                <section className="event-hero" aria-label="Resumo do evento">
+                  {event.cover_image_url && (
+                    <div className="event-hero-bg" style={{ backgroundImage: `url(${event.cover_image_url})` }} aria-hidden="true" />
                   )}
-                </div>
-              </article>
-
-              <article className="overview-card">
-                <span className="overview-card-icon" aria-hidden="true">👥</span>
-                <div className="overview-card-body">
-                  <p className="overview-card-label">Resumo de Convidados</p>
-                  <p className="overview-card-value">
-                    {formatNumber(guestCount)}
-                    <span className="overview-card-muted"> adicionados</span>
-                  </p>
-                  <p className="overview-card-hint">
-                    {formatNumber(confirmedCount)} confirmados ·{' '}
-                    {event.guest_count ? `${formatNumber(event.guest_count)} previstos` : 'sem meta definida'}
-                  </p>
-                </div>
-              </article>
-            </section>
-
-            {/* Módulos do planejamento */}
-            <section className="modules-section" aria-labelledby="modules-heading">
-              <h2 id="modules-heading" className="section-heading">
-                Meu planejamento
-              </h2>
-              <div className="module-grid">
-                {MODULES.map((module) => (
-                  <button
-                    key={module.id}
-                    type="button"
-                    className="module-card"
-                    aria-label={`Abrir módulo ${module.title}`}
-                    onClick={
-                      module.id === 'guests'
-                        ? () => void onOpenGuests()
-                        : module.id === 'tasks'
-                          ? () => void onOpenTasks()
-                          : undefined
-                    }
-                  >
-                    <span className="module-card-icon" aria-hidden="true">
-                      {module.icon}
-                    </span>
-                    <span className="module-card-title">{module.title}</span>
-                    <span className="module-card-caption">{module.caption}</span>
+                  <span className="event-hero-badge">
+                    {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]} · {EVENT_STATUS_LABELS[event.status]}
+                  </span>
+                  <h1 className="event-hero-title">
+                    {EVENT_TYPE_LABELS[event.event_type]} {coupleText ?? event.title}
+                  </h1>
+                  {coupleText && <p className="event-hero-couple">{event.title}</p>}
+                  {countdownText && (
+                    <p className="event-hero-countdown-text">✨ {countdownText}</p>
+                  )}
+                  <button type="button" className="hero-photo-btn" onClick={handlePickPhoto} disabled={uploading}>
+                    {uploading ? 'Enviando...' : event.cover_image_url ? '📷 Trocar foto' : '📷 Adicionar foto'}
                   </button>
-                ))}
-              </div>
-            </section>
-            </>
+                </section>
+
+                {uploadError && <p className="auth-error" role="alert">⚠ {uploadError}</p>}
+
+                {/* KPIs */}
+                <section className="kpi-grid" aria-label="Métricas do evento">
+                  <article className="kpi-card">
+                    <span className="kpi-card-icon" aria-hidden="true">✅</span>
+                    <div className="kpi-card-body">
+                      <span className="kpi-card-label">Tarefas do Evento</span>
+                      <span className="kpi-card-value">{completedTasks} / {totalTasks}</span>
+                      <div className="kpi-progress" role="progressbar" aria-valuenow={taskProgress} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso das tarefas">
+                        <span className="kpi-progress-fill" style={{ width: `${taskProgress}%` }} />
+                      </div>
+                      <span className="kpi-card-hint">{taskProgress}% concluídas</span>
+                    </div>
+                  </article>
+
+                  <article className="kpi-card">
+                    <span className="kpi-card-icon" aria-hidden="true">👥</span>
+                    <div className="kpi-card-body">
+                      <span className="kpi-card-label">Total de Convidados</span>
+                      <span className="kpi-card-value">{confirmedGuests} <span className="kpi-card-muted">/ {totalGuests}</span></span>
+                      <span className="kpi-card-hint">
+                        {confirmedGuests} confirmados{pendingGuests > 0 ? ` · ${pendingGuests} pendente${pendingGuests > 1 ? 's' : ''}` : ''}
+                      </span>
+                    </div>
+                  </article>
+
+                  <article className="kpi-card">
+                    <span className="kpi-card-icon" aria-hidden="true">💰</span>
+                    <div className="kpi-card-body">
+                      <span className="kpi-card-label">Orçamento do Evento</span>
+                      <span className="kpi-card-value">{formatCurrency(totalPaid)}</span>
+                      <div className="kpi-progress" role="progressbar" aria-valuenow={budgetPercent} aria-valuemin={0} aria-valuemax={100} aria-label="Percentual pago do orçamento">
+                        <span className="kpi-progress-fill" style={{ width: `${budgetPercent}%` }} />
+                      </div>
+                      <span className="kpi-card-hint">{budget > 0 ? `${budgetPercent}% pago de ${formatCurrency(budget)}` : 'Meta não definida'}</span>
+                    </div>
+                  </article>
+
+                  <article className="kpi-card">
+                    <span className="kpi-card-icon" aria-hidden="true">🤝</span>
+                    <div className="kpi-card-body">
+                      <span className="kpi-card-label">Equipe / Organizadores</span>
+                      <div className="team-avatars">
+                        <span className="team-avatar" title={event.client_name_1 ?? 'Você'} aria-label={event.client_name_1 ?? 'Você'}>
+                          {initials(event.client_name_1, null)}
+                        </span>
+                        {data.members.map((m) => (
+                          <span key={m.user_id} className="team-avatar" title={m.full_name ?? m.email ?? 'Membro'} aria-label={m.full_name ?? m.email ?? 'Membro'}>
+                            {initials(m.full_name, m.email)}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="kpi-card-hint">{data.members.length} organizadores</span>
+                    </div>
+                  </article>
+                </section>
+
+                {/* Próximas tarefas + resumo financeiro */}
+                <div className="dashboard-columns">
+                  <section className="dashboard-panel" aria-labelledby="upcoming-title">
+                    <div className="dashboard-panel-head">
+                      <h2 id="upcoming-title" className="section-heading">Próximas tarefas</h2>
+                      <button type="button" className="link-btn" onClick={onOpenTasks}>Ver Kanban Completo →</button>
+                    </div>
+
+                    {pendingTasks.length === 0 ? (
+                      <p className="guest-list-empty">Nenhuma tarefa pendente. 🎉</p>
+                    ) : (
+                      <ul className="task-list-dash">
+                        {pendingTasks.map((task) => {
+                          const p = PRIORITY_BADGE[task.priority] ?? PRIORITY_BADGE.low
+                          return (
+                            <li key={task.id} className={`task-row-dash${task.completed ? ' is-done' : ''}`}>
+                              <label className="task-check">
+                                <input type="checkbox" checked={task.completed} onChange={() => void toggleTask(task)} aria-label={`Concluir ${task.title}`} />
+                                <span className="task-check-title">{task.title}</span>
+                              </label>
+                              <div className="task-row-meta">
+                                {task.category && <span className="task-cat">{task.category}</span>}
+                                <span className={`task-priority ${p.className}`}>{p.label}</span>
+                                {task.due_date && <span className="task-due">📅 {formatDate(task.due_date)}</span>}
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </section>
+
+                  <section className="dashboard-panel" aria-labelledby="finance-title">
+                    <h2 id="finance-title" className="section-heading">Resumo financeiro</h2>
+                    <dl className="finance-list">
+                      <div className="finance-row">
+                        <dt>Total Contratado</dt>
+                        <dd>{formatCurrency(totalContratado)}</dd>
+                      </div>
+                      <div className="finance-row">
+                        <dt>Total Já Pago</dt>
+                        <dd>{formatCurrency(totalPaid)}</dd>
+                      </div>
+                      <div className="finance-row is-total">
+                        <dt>Saldo Pendente</dt>
+                        <dd>{formatCurrency(saldoPendente)}</dd>
+                      </div>
+                    </dl>
+                    <button type="button" className="btn-secondary" style={{ marginTop: '1rem' }} onClick={onOpenTasks}>
+                      Gerenciar Orçamento
+                    </button>
+                  </section>
+                </div>
+
+                {/* Módulos */}
+                <section className="modules-section" aria-labelledby="modules-heading">
+                  <h2 id="modules-heading" className="section-heading">Meu planejamento</h2>
+                  <div className="module-grid">
+                    {MODULES.map((module) => (
+                      <button
+                        key={module.id}
+                        type="button"
+                        className="module-card"
+                        aria-label={`Abrir módulo ${module.title}`}
+                        onClick={
+                          module.id === 'guests'
+                            ? () => void onOpenGuests()
+                            : module.id === 'tasks'
+                              ? () => void onOpenTasks()
+                              : undefined
+                        }
+                      >
+                        <span className="module-card-icon" aria-hidden="true">{module.icon}</span>
+                        <span className="module-card-title">{module.title}</span>
+                        <span className="module-card-caption">{module.caption}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </>
             )}
           </div>
         </main>
@@ -419,3 +521,4 @@ export function EventDashboard({
     </div>
   )
 }
+

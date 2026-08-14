@@ -14,6 +14,12 @@ import type {
   GuestVoteValue,
   GuestComment,
   GuestCommentInsert,
+  GuestRole,
+  GuestRoleInsert,
+  GuestRoleAssignment,
+  GuestRoleAssignmentInsert,
+  GuestRoleVote,
+  GuestRoleVoteStatus,
   EventMember,
   EventMemberRole,
   GuestPriority,
@@ -38,6 +44,10 @@ import type {
   TaskActivity,
   EventNotification,
   EventNotificationInsert,
+  EventTable,
+  EventTableInsert,
+  EventTableGuest,
+  EventTableGuestInsert,
   Expense,
   ExpenseInsert,
   GiftRegistryItem,
@@ -230,16 +240,71 @@ export async function fetchEventById(id: string): Promise<QueryResult<Event>> {
  * O `user_id` é obtido da sessão autenticada e enviado no insert,
  * pois a coluna é NOT NULL e a RLS exige `auth.uid() = user_id`.
  */
+function generateEventCode(): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let code = ''
+  for (let i = 0; i < 8; i++) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return code
+}
+
 export async function createEvent(values: EventInsert): Promise<QueryResult<Event>> {
   const { data } = await supabase.auth.getSession()
   const userId = data.session?.user?.id
   if (!userId) {
     return { data: null, error: new Error('NOT_AUTHENTICATED') }
   }
-  return insertRecord<Event>('events', {
-    ...values,
-    user_id: userId,
-  } as Record<string, unknown>)
+
+  const insert = (payload: Record<string, unknown>) =>
+    insertRecord<Event>('events', payload)
+
+  const base = { ...values, user_id: userId }
+
+  const tryInsert = async (): Promise<QueryResult<Event>> => {
+    // Tenta algumas vezes para evitar colisão no código único.
+    let lastResult: QueryResult<Event> = { data: null, error: null }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const full: Record<string, unknown> = { ...base, code: generateEventCode() }
+      lastResult = await insert(full)
+
+      // Re-tenta somente em violação de constraint única no código.
+      if (lastResult.error && /unique|duplicate|code/i.test(lastResult.error.message)) {
+        continue
+      }
+      return lastResult
+    }
+    return lastResult
+  }
+
+  const first = await tryInsert()
+
+  // Tolerância a migrations pendentes: se as colunas do tema custom
+  // (e o valor 'custom' no check constraint) ainda não existem, refaz
+  // com um tema base e sem as colunas custom.
+  if (
+    first.error &&
+    /column .* does not exist|theme_preset|custom_/i.test(first.error.message)
+  ) {
+    const fallback: Record<string, unknown> = {
+      user_id: userId,
+      title: values.title,
+      event_type: values.event_type ?? 'wedding',
+      theme_preset: 'rose-gold',
+      description: values.description ?? null,
+      client_name_1: values.client_name_1 ?? null,
+      client_name_2: values.client_name_2 ?? null,
+      date: values.date ?? null,
+      location: values.location ?? null,
+      guest_count: values.guest_count ?? null,
+      budget: values.budget ?? null,
+      status: values.status ?? 'draft',
+      code: generateEventCode(),
+    }
+    return insert(fallback)
+  }
+
+  return first
 }
 
 /**
@@ -286,16 +351,20 @@ export async function fetchGuestsByEvent(
  * O `created_by` vem da sessão. Só `name` e `event_id` são obrigatórios.
  */
 export async function createGuest(values: GuestInsert): Promise<QueryResult<Guest>> {
-  // Insere apenas as colunas base da tabela `guests`, presentes em qualquer
-  // estágio de migração. As colunas novas (priority, invited_by, group_id,
-  // created_by etc.) são adicionadas quando existirem; aqui evitamos erro
-  // de "column does not exist" em bancos ainda não migrados.
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id ?? null
+
   return insertRecord<Guest>('guests', {
     event_id: values.event_id,
     name: values.name,
     email: values.email ?? null,
     phone: values.phone ?? null,
     guest_group: values.guest_group ?? null,
+    group_id: values.group_id ?? null,
+    priority: values.priority ?? null,
+    invited_by: values.invited_by ?? null,
+    relationship_to_event: values.relationship_to_event ?? null,
+    created_by: userId,
   } as Record<string, unknown>)
 }
 
@@ -306,10 +375,17 @@ export async function createGuest(values: GuestInsert): Promise<QueryResult<Gues
 export async function createGuests(
   eventId: string,
   names: string[],
+  defaults?: { invited_by?: Guest['invited_by']; relationship_to_event?: string },
 ): Promise<QueryListResult<Guest>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id ?? null
+
   const rows = names.map((name) => ({
     event_id: eventId,
     name: name.trim(),
+    invited_by: defaults?.invited_by ?? null,
+    relationship_to_event: defaults?.relationship_to_event ?? null,
+    created_by: userId,
   }))
 
   const { data, error } = await supabase
@@ -335,6 +411,66 @@ export async function updateGuest(
  */
 export async function deleteGuest(id: string): Promise<{ error: Error | null }> {
   return deleteRecord('guests', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: MESAS ==========
+
+/** Busca as mesas de um evento. */
+export async function fetchEventTables(
+  eventId: string,
+): Promise<QueryListResult<EventTable>> {
+  return fetchWithFilter<EventTable>('event_tables', { event_id: eventId }, {
+    orderBy: { column: 'created_at', ascending: true },
+  })
+}
+
+/** Cria uma mesa. */
+export async function createEventTable(
+  values: EventTableInsert,
+): Promise<QueryResult<EventTable>> {
+  return insertRecord<EventTable>('event_tables', values as Record<string, unknown>)
+}
+
+/** Atualiza uma mesa. */
+export async function updateEventTable(
+  id: string,
+  values: Partial<EventTable>,
+): Promise<QueryResult<EventTable>> {
+  return updateRecord<EventTable>('event_tables', id, values as Record<string, unknown>)
+}
+
+/** Remove uma mesa. */
+export async function deleteEventTable(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('event_tables', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: ALOCAÇÃO DE MESAS ==========
+
+/** Busca as alocações de um evento. */
+export async function fetchEventTableGuests(
+  eventId: string,
+): Promise<QueryListResult<EventTableGuest>> {
+  return fetchWithFilter<EventTableGuest>('event_table_guests', { event_id: eventId })
+}
+
+/** Aloca um convidado OU acompanhante em uma mesa. */
+export async function createEventTableGuest(
+  values: EventTableGuestInsert,
+): Promise<QueryResult<EventTableGuest>> {
+  return insertRecord<EventTableGuest>('event_table_guests', values as Record<string, unknown>)
+}
+
+/** Move uma alocação para outra mesa (ou remove se table_id null). */
+export async function updateEventTableGuest(
+  id: string,
+  values: Partial<EventTableGuest>,
+): Promise<QueryResult<EventTableGuest>> {
+  return updateRecord<EventTableGuest>('event_table_guests', id, values as Record<string, unknown>)
+}
+
+/** Remove uma alocação. */
+export async function deleteEventTableGuest(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('event_table_guests', id)
 }
 
 // ========== OPERAÇÕES ESPECÍFICAS: VENDORS ==========
@@ -843,6 +979,92 @@ export async function updateGuestGroup(
 /** Remove um grupo (convidados ligados ficam sem grupo via SET NULL). */
 export async function deleteGuestGroup(id: string): Promise<{ error: Error | null }> {
   return deleteRecord('event_guest_groups', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: PAPÉIS / CATEGORIAS ==========
+
+/** Busca os papéis de um evento. */
+export async function fetchGuestRoles(
+  eventId: string,
+): Promise<QueryListResult<GuestRole>> {
+  return fetchWithFilter<GuestRole>('guest_roles', { event_id: eventId }, {
+    orderBy: { column: 'created_at', ascending: true },
+  })
+}
+
+/** Cria um papel/categoria. */
+export async function createGuestRole(
+  values: GuestRoleInsert,
+): Promise<QueryResult<GuestRole>> {
+  return insertRecord<GuestRole>('guest_roles', values as Record<string, unknown>)
+}
+
+/** Atualiza um papel. */
+export async function updateGuestRole(
+  id: string,
+  values: Partial<GuestRole>,
+): Promise<QueryResult<GuestRole>> {
+  return updateRecord<GuestRole>('guest_roles', id, values as Record<string, unknown>)
+}
+
+/** Remove um papel (atribuições e votos caem em cascade). */
+export async function deleteGuestRole(id: string): Promise<{ error: Error | null }> {
+  return deleteRecord('guest_roles', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: ATRIBUIÇÕES DE PAPEL ==========
+
+/** Busca as atribuições de papel de um evento. */
+export async function fetchGuestRoleAssignments(
+  eventId: string,
+): Promise<QueryListResult<GuestRoleAssignment>> {
+  return fetchWithFilter<GuestRoleAssignment>('guest_role_assignments', { event_id: eventId })
+}
+
+/** Atribui um papel a um convidado OU acompanhante. */
+export async function createGuestRoleAssignment(
+  values: GuestRoleAssignmentInsert,
+): Promise<QueryResult<GuestRoleAssignment>> {
+  return insertRecord<GuestRoleAssignment>('guest_role_assignments', values as Record<string, unknown>)
+}
+
+/** Remove uma atribuição de papel. */
+export async function deleteGuestRoleAssignment(
+  id: string,
+): Promise<{ error: Error | null }> {
+  return deleteRecord('guest_role_assignments', id)
+}
+
+// ========== OPERAÇÕES ESPECÍFICAS: VOTO DE PAPEL (CASAL) ==========
+
+/** Busca os votos de um evento. */
+export async function fetchGuestRoleVotes(
+  eventId: string,
+): Promise<QueryListResult<GuestRoleVote>> {
+  return fetchWithFilter<GuestRoleVote>('guest_role_votes', { event_id: eventId })
+}
+
+/** Cria/substitui o voto do usuário atual sobre uma atribuição. */
+export async function upsertGuestRoleVote(
+  assignmentId: string,
+  status: GuestRoleVoteStatus,
+): Promise<QueryResult<GuestRoleVote>> {
+  const { data: session } = await supabase.auth.getSession()
+  const userId = session.session?.user?.id
+  if (!userId) {
+    return { data: null, error: new Error('NOT_AUTHENTICATED') }
+  }
+
+  const { data, error } = await supabase
+    .from('guest_role_votes')
+    .upsert(
+      { assignment_id: assignmentId, user_id: userId, status },
+      { onConflict: 'assignment_id,user_id' },
+    )
+    .select()
+    .single()
+
+  return { data: data as GuestRoleVote | null, error }
 }
 
 // ========== OPERAÇÕES ESPECÍFICAS: ACOMPANHANTES ==========

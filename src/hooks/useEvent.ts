@@ -4,6 +4,7 @@ import {
   fetchUserEvents,
   fetchEventById,
   updateEvent,
+  deleteEvent,
 } from '../lib/supabase/database'
 
 interface UseEventReturn {
@@ -14,6 +15,7 @@ interface UseEventReturn {
   refresh: () => Promise<void>
   selectEvent: (id: string) => Promise<void>
   saveEvent: (id: string, values: EventUpdate) => Promise<{ error: Error | null }>
+  deleteEvent: (id: string) => Promise<{ error: Error | null }>
 }
 
 /**
@@ -101,6 +103,21 @@ export function useEvent(): UseEventReturn {
     [],
   )
 
+  const removeEvent = useCallback(async (id: string) => {
+    const { error: deleteError } = await deleteEvent(id)
+    if (deleteError) {
+      return { error: deleteError }
+    }
+
+    setEvents((current) => {
+      const next = current.filter((e) => e.id !== id)
+      // Se o evento excluído era o ativo, seleciona o primeiro restante.
+      setEvent((active) => (active && active.id === id ? (next[0] ?? null) : active))
+      return next
+    })
+    return { error: null }
+  }, [])
+
   return {
     event,
     events,
@@ -109,5 +126,6 @@ export function useEvent(): UseEventReturn {
     refresh,
     selectEvent,
     saveEvent,
+    deleteEvent: removeEvent,
   }
 }

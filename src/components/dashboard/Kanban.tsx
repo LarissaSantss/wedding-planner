@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { CSSProperties } from 'react'
 import type { Event, Task, Profile, TaskCategory } from '../../lib/supabase/types'
-import { getThemeStyle } from '../../utils/theme'
 import { useKanban } from '../../hooks/useKanban'
 import {
   fetchTasksByEvent,
@@ -15,7 +13,6 @@ import { TaskDetail } from './TaskDetail'
 
 interface KanbanProps {
   event: Event
-  onBack: () => void
 }
 
 type ViewMode = 'kanban' | 'list'
@@ -33,14 +30,7 @@ function columnIcon(name: string): string {
   return '📋'
 }
 
-export function Kanban({ event, onBack }: KanbanProps) {
-  const themeStyle = getThemeStyle(
-    event.theme_preset,
-    event.theme_preset === 'custom'
-      ? { primary: event.custom_primary, secondary: event.custom_secondary, accent: event.custom_accent }
-      : undefined,
-  ) as CSSProperties
-
+export function Kanban({ event }: KanbanProps) {
   const { boards, columns, activeBoardId, loading, selectBoard } = useKanban(event.id)
 
   const [tasks, setTasks] = useState<Task[]>([])
@@ -190,25 +180,20 @@ export function Kanban({ event, onBack }: KanbanProps) {
   }
 
   return (
-    <div className="dashboard-shell" style={themeStyle}>
-      <main className="kb-main">
-        {/* Cabeçalho principal */}
-        <header className="kb-header">
-          <div className="kb-header-title-row">
-            <span className="kb-header-icon" aria-hidden="true">☑</span>
-            <div>
-              <h1 className="kb-title">Checklist & Quadro Kanban</h1>
-              <p className="kb-subtitle">
-                Organize tarefas com auto-categorização inteligente e fluxo Kanban
-              </p>
-            </div>
+    <div className="kb-section">
+      {/* Cabeçalho principal */}
+      <header className="kb-header">
+        <div className="kb-header-title-row">
+          <span className="kb-header-icon" aria-hidden="true">☑</span>
+          <div>
+            <h1 className="kb-title">Checklist & Quadro Kanban</h1>
+            <p className="kb-subtitle">
+              Organize tarefas com auto-categorização inteligente e fluxo Kanban
+            </p>
           </div>
+        </div>
 
-          <div className="kb-header-actions">
-            <button type="button" className="kb-back-btn" onClick={onBack}>
-              ← Voltar
-            </button>
-
+        <div className="kb-header-actions">
             {boards.length > 1 && (
               <select
                 className="form-control kb-board-select"
@@ -355,7 +340,6 @@ export function Kanban({ event, onBack }: KanbanProps) {
             )}
           </div>
         )}
-      </main>
 
       {/* Modal nova tarefa */}
       {showNewTask && (

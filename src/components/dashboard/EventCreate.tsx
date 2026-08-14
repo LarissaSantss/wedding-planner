@@ -96,6 +96,22 @@ export function EventCreate({ theme, onCreated, onCancel }: EventCreateProps) {
     setName2('')
   }
 
+  // Reseta o formulário inteiro (inclusive tipo, papel, tema e cores).
+  const resetForm = () => {
+    setEventType('wedding')
+    setRole('none')
+    setName1('')
+    setName2('')
+    setTitle('')
+    setDate('')
+    setLocation('')
+    setThemePreset('rose-gold')
+    setCustomPrimary('#B76E79')
+    setCustomSecondary('#E8C4C4')
+    setCustomAccent('#D4AF37')
+    setError(null)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) {
@@ -105,6 +121,8 @@ export function EventCreate({ theme, onCreated, onCancel }: EventCreateProps) {
     setCreating(true)
     setError(null)
 
+    // Lê os valores atuais dos inputs no momento do envio, evitando
+    // qualquer dado "fantasma" de um evento anterior.
     const values = {
       title: title.trim(),
       event_type: eventType,
@@ -129,6 +147,8 @@ export function EventCreate({ theme, onCreated, onCancel }: EventCreateProps) {
       setCreating(false)
       return
     }
+    resetForm()
+    setCreating(false)
     onCreated(title.trim())
   }
 

@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
-import type { Event, Guest, GuestPriority, CompanionRelationship } from '../../lib/supabase/types'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Event, Guest, GuestPriority, CompanionRelationship, GuestRoleAssignment } from '../../lib/supabase/types'
 import { useGuestModule } from '../../hooks/useGuestModule'
 import { GuestDetail } from './GuestDetail'
 import { COMPANION_RELATIONSHIP_LABELS, COMPANION_RELATIONSHIP_LIST } from '../../utils/eventFormat'
-import { createCompanion, createGuests } from '../../lib/supabase/database'
+import { createCompanion, createGuests, fetchGuestRoleAssignments } from '../../lib/supabase/database'
 
 interface GuestListProps {
   event: Event
@@ -18,13 +18,6 @@ const PRIORITY_OPTIONS: Array<{ value: GuestPriority; label: string }> = [
 interface CompanionDraft {
   name: string
   relationship: CompanionRelationship
-}
-
-function stars(priority: GuestPriority | null): string {
-  if (priority === 1) return '⭐'
-  if (priority === 2) return '⭐⭐'
-  if (priority === 3) return '⭐⭐⭐'
-  return ''
 }
 
 function invitedByLabel(event: Event, value: Guest['invited_by']): string {
@@ -56,11 +49,16 @@ export function GuestList({ event }: GuestListProps) {
     addGuest,
     updateGuest,
     addGroup,
+    removeGuest,
+    prioritize,
   } = useGuestModule(event.id)
 
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
+  const [macroFilter, setMacroFilter] = useState<'all' | 'special' | 'common'>('all')
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<Guest | null>(null)
+  const [assignments, setAssignments] = useState<GuestRoleAssignment[]>([])
 
   // Modal
   const [showAdd, setShowAdd] = useState(false)
@@ -83,6 +81,15 @@ export function GuestList({ event }: GuestListProps) {
   const [bulkText, setBulkText] = useState('')
   const [bulkConfirm, setBulkConfirm] = useState<string[] | null>(null)
 
+  const loadAssignments = useCallback(async () => {
+    const { data } = await fetchGuestRoleAssignments(event.id)
+    setAssignments(data ?? [])
+  }, [event.id])
+
+  useEffect(() => {
+    void loadAssignments()
+  }, [loadAssignments])
+
   const indicators = useMemo(() => {
     const total = guests.length
     const confirmed = guests.filter((g) => g.rsvp_status === 'confirmed').length
@@ -96,6 +103,11 @@ export function GuestList({ event }: GuestListProps) {
   const filtered = useMemo(() => {
     return guests.filter((g) => {
       if (search && !g.name.toLowerCase().includes(search.toLowerCase())) return false
+
+      // Filtro macro: participantes com papéis especiais vs comuns
+      if (macroFilter === 'special' && !assignments.some((a) => a.guest_id === g.id)) return false
+      if (macroFilter === 'common' && assignments.some((a) => a.guest_id === g.id)) return false
+
       if (filter === 'all') return true
       if (filter === 'none') return g.priority === null
       if (filter === '1') return g.priority === 1
@@ -106,7 +118,7 @@ export function GuestList({ event }: GuestListProps) {
       if (filter === 'both') return g.invited_by === 'both'
       return true
     })
-  }, [guests, search, filter])
+  }, [guests, search, filter, macroFilter, assignments])
 
   const openAdd = () => {
     setForm({ name: '', email: '', phone: '', priority: '', invited_by: '' })
@@ -274,6 +286,12 @@ export function GuestList({ event }: GuestListProps) {
         </div>
       </div>
 
+      <div className="guest-macro-row">
+        <button type="button" className={`guest-macro${macroFilter === 'all' ? ' is-active' : ''}`} onClick={() => setMacroFilter('all')}>Todos</button>
+        <button type="button" className={`guest-macro${macroFilter === 'special' ? ' is-active' : ''}`} onClick={() => setMacroFilter('special')}>🌟 Participantes / Papéis Especiais</button>
+        <button type="button" className={`guest-macro${macroFilter === 'common' ? ' is-active' : ''}`} onClick={() => setMacroFilter('common')}>👥 Convidados Comuns</button>
+      </div>
+
       <div className="guest-toolbar-row">
         <input
           className="form-control guest-search"
@@ -312,24 +330,60 @@ export function GuestList({ event }: GuestListProps) {
           </button>
         </div>
       ) : (
-        <ul className="guest-card-grid">
+        <ul className="guest-card-list">
           {filtered.map((guest) => (
-            <li key={guest.id} className="guest-card" onClick={() => setSelectedGuest(guest)}>
-              <div className="guest-card-head">
-                <span className="guest-card-name">{guest.name}</span>
-                {guest.priority && <span className="guest-card-stars">{stars(guest.priority)}</span>}
+            <li key={guest.id} className="guest-card-row" onClick={() => setSelectedGuest(guest)}>
+              <div className="guest-card-row-left">
+                <div className="guest-card-row-title">
+                  <span className="guest-card-name">{guest.name}</span>
+                  <span className="guest-card-author">
+                    Adicionado por {guest.invited_by ? invitedByLabel(event, guest.invited_by) : 'organizador'}
+                    {guest.relationship_to_event ? ` · ${guest.relationship_to_event}` : ''}
+                  </span>
+                </div>
+                <div className="guest-card-row-meta">
+                  {guest.group_id && (
+                    <span className="guest-card-chip">
+                      {groups.find((g) => g.id === guest.group_id)?.name ?? 'Grupo'}
+                    </span>
+                  )}
+                  {guest.phone && <span className="guest-card-line">{guest.phone}</span>}
+                  {guest.email && <span className="guest-card-line">{guest.email}</span>}
+                  {hasPending(guest) && (
+                    <span className="guest-pending-badge">Informações pendentes</span>
+                  )}
+                </div>
               </div>
-              <div className="guest-card-meta">
-                {guest.relationship_to_event && <span className="guest-card-chip">{guest.relationship_to_event}</span>}
-                {guest.invited_by && <span className="guest-card-chip">Convidado de {invitedByLabel(event, guest.invited_by)}</span>}
-              </div>
-              <div className="guest-card-foot">
-                <span className={`guest-status guest-status-${guest.rsvp_status}`}>
-                  {guest.rsvp_status === 'confirmed' ? 'Confirmado' : guest.rsvp_status === 'declined' ? 'Recusado' : 'Pendente'}
-                </span>
-                {hasPending(guest) && (
-                  <span className="guest-pending-badge">Informações pendentes</span>
-                )}
+
+              <div className="guest-card-row-right">
+                <div className="guest-star-picker" onClick={(e) => e.stopPropagation()}>
+                  {[1, 2, 3].map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`guest-star-btn${(guest.priority ?? 0) >= level ? ' is-filled' : ''}`}
+                      onClick={() => void prioritize(guest.id, level as GuestPriority)}
+                      aria-label={`Prioridade ${level} estrela${level > 1 ? 's' : ''}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="guest-trash-btn"
+                  onClick={(e) => { e.stopPropagation(); setDeleteConfirm(guest) }}
+                  aria-label={`Excluir ${guest.name}`}
+                  title={`Excluir ${guest.name}`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                </button>
               </div>
             </li>
           ))}
@@ -454,6 +508,27 @@ export function GuestList({ event }: GuestListProps) {
         </div>
       )}
 
+      {deleteConfirm && (
+        <div className="drawer-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="confirm-dialog-title">Excluir convidado?</h3>
+            <p className="confirm-dialog-text">
+              Deseja excluir <strong>{deleteConfirm.name}</strong>? Esta ação não pode ser desfeita.
+            </p>
+            <div className="confirm-dialog-actions">
+              <button type="button" className="btn-secondary" onClick={() => setDeleteConfirm(null)}>Cancelar</button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => { void removeGuest(deleteConfirm.id); setDeleteConfirm(null) }}
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedGuest && (
         <GuestDetail
           event={event}
@@ -464,6 +539,7 @@ export function GuestList({ event }: GuestListProps) {
           onGroupChange={(id, groupId) => void updateGuest(id, { group_id: groupId || null })}
           groups={groups}
           onCreateGroup={addGroup}
+          onDelete={() => { setDeleteConfirm(selectedGuest); setSelectedGuest(null) }}
         />
       )}
     </div>
