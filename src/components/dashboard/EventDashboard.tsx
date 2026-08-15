@@ -98,7 +98,7 @@ function initials(name: string | null | undefined, email: string | null | undefi
 
 /**
  * Dashboard principal do LUNA com KPIs reais (tarefas, convidados, orçamento
- * e equipe), próximas tarefas pendentes e resumo financeiro.
+ * e equipe), bloco de atenção, próximas tarefas e resumo financeiro.
  */
 export function EventDashboard({
   event,
@@ -170,7 +170,7 @@ export function EventDashboard({
       tasks: tasks.status === 'fulfilled' ? (tasks.value.data ?? []) : [],
       expenses: expenses.status === 'fulfilled' ? (expenses.value.data ?? []) : [],
       vendors: vendors.status === 'fulfilled' ? (vendors.value.data ?? []) : [],
-      members: members.status === 'fulfilled' ? (members.value.data as Member[] ?? []) : [],
+      members: members.status === 'fulfilled' ? ((members.value.data as Member[]) ?? []) : [],
     })
   }
 
@@ -198,8 +198,81 @@ export function EventDashboard({
     .reduce((sum, v) => sum + (Number(v.cost) || 0), 0)
   const saldoPendente = Math.max(0, totalContratado - totalPaid)
 
-  /* ---------- Tarefas pendentes ---------- */
-  const pendingTasks = data.tasks.filter((t) => !t.completed).slice(0, 5)
+  /* ---------- Tarefas: atraso, urgência e próximas ---------- */
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const todayTime = now.getTime()
+
+  const isOverdue = (t: Task) =>
+    !t.completed && t.due_date !== null && new Date(`${t.due_date}T00:00:00`).getTime() < todayTime
+
+  const overdueTasks = data.tasks.filter(isOverdue)
+  const urgentOpenTasks = data.tasks.filter((t) => !t.completed && t.priority === 'high')
+  const attentionTaskCount = overdueTasks.length + urgentOpenTasks.length
+
+  // Próximas tarefas: no prazo (hoje ou futuro) ou sem data, mais urgentes primeiro.
+  const upcomingTasks = data.tasks
+    .filter((t) => !t.completed && !isOverdue(t))
+    .sort((a, b) => {
+      const rank = (p: TaskPriority) => (p === 'high' ? 0 : p === 'medium' ? 1 : 2)
+      const byPriority = rank(a.priority) - rank(b.priority)
+      if (byPriority !== 0) return byPriority
+      const aTime = a.due_date ? new Date(`${a.due_date}T00:00:00`).getTime() : Number.POSITIVE_INFINITY
+      const bTime = b.due_date ? new Date(`${b.due_date}T00:00:00`).getTime() : Number.POSITIVE_INFINITY
+      return aTime - bTime
+    })
+    .slice(0, 5)
+
+  /* ---------- Alertas "O que precisa de atenção" ---------- */
+  interface AttentionItem {
+    key: string
+    icon: string
+    text: string
+  }
+  const attentionItems: AttentionItem[] = []
+
+  if (overdueTasks.length > 0) {
+    attentionItems.push({
+      key: 'overdue-tasks',
+      icon: '⏰',
+      text: `${overdueTasks.length} ${overdueTasks.length === 1 ? 'tarefa vencida' : 'tarefas vencidas'} — ${overdueTasks
+        .slice(0, 3)
+        .map((t) => t.title)
+        .join(', ')}${overdueTasks.length > 3 ? '…' : ''}`,
+    })
+  }
+
+  if (budget > 0 && totalPaid > budget) {
+    attentionItems.push({
+      key: 'budget-over',
+      icon: '💸',
+      text: `Orçamento estourado em ${formatCurrency(totalPaid - budget)} (${formatCurrency(totalPaid)} de ${formatCurrency(budget)})`,
+    })
+  }
+
+  const overdueExpenses = data.expenses.filter(
+    (e) => !e.paid && e.due_date !== null && new Date(`${e.due_date}T00:00:00`).getTime() < todayTime,
+  )
+  if (overdueExpenses.length > 0) {
+    const total = overdueExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+    attentionItems.push({
+      key: 'overdue-expenses',
+      icon: '🧾',
+      text: `${overdueExpenses.length} ${overdueExpenses.length === 1 ? 'pagamento a fornecedor vencido' : 'pagamentos a fornecedores vencidos'} (${formatCurrency(total)})`,
+    })
+  }
+
+  const pendingVendors = data.vendors.filter((v) => v.status === 'pending')
+  if (pendingVendors.length > 0) {
+    attentionItems.push({
+      key: 'pending-vendors',
+      icon: '🤝',
+      text: `${pendingVendors.length} ${pendingVendors.length === 1 ? 'fornecedor aguardando contrato' : 'fornecedores aguardando contrato'} — ${pendingVendors
+        .slice(0, 3)
+        .map((v) => v.name)
+        .join(', ')}${pendingVendors.length > 3 ? '…' : ''}`,
+    })
+  }
 
   const handlePickPhoto = () => fileInputRef.current?.click()
 
@@ -221,6 +294,15 @@ export function EventDashboard({
       tasks: prev.tasks.map((t) => (t.id === task.id ? { ...t, completed: !t.completed } : t)),
     }))
     await updateTask(task.id, { completed: !task.completed })
+  }
+
+  const toggleFavorite = async (task: Task) => {
+    const next: TaskPriority = task.priority === 'high' ? 'medium' : 'high'
+    setData((prev) => ({
+      ...prev,
+      tasks: prev.tasks.map((t) => (t.id === task.id ? { ...t, priority: next } : t)),
+    }))
+    await updateTask(task.id, { priority: next })
   }
 
   const handleNav = (id: (typeof SIDEBAR_NAV)[number]['id']) => {
@@ -285,7 +367,7 @@ export function EventDashboard({
                   ? activeSection === 'dashboard'
                   : item.id === 'guests'
                     ? activeSection === 'guests'
-                  : item.id === 'tasks'
+                    : item.id === 'tasks'
                       ? activeSection === 'tasks'
                       : item.id === 'settings'
                         ? activeSection === 'settings'
@@ -371,6 +453,9 @@ export function EventDashboard({
                   {countdownText && (
                     <p className="event-hero-countdown-text">✨ {countdownText}</p>
                   )}
+                  {event.date && (
+                    <p className="event-hero-date">Data planejada: {formatDate(event.date)}</p>
+                  )}
                   <button type="button" className="hero-photo-btn" onClick={handlePickPhoto} disabled={uploading}>
                     {uploading ? 'Enviando...' : event.cover_image_url ? '📷 Trocar foto' : '📷 Adicionar foto'}
                   </button>
@@ -389,6 +474,11 @@ export function EventDashboard({
                         <span className="kpi-progress-fill" style={{ width: `${taskProgress}%` }} />
                       </div>
                       <span className="kpi-card-hint">{taskProgress}% concluídas</span>
+                      {attentionTaskCount > 0 && (
+                        <span className="kpi-alert" role="alert">
+                          ⚠ {attentionTaskCount} {attentionTaskCount === 1 ? 'tarefa atrasada/urgente' : 'tarefas atrasadas/urgentes'}
+                        </span>
+                      )}
                     </div>
                   </article>
 
@@ -434,6 +524,24 @@ export function EventDashboard({
                   </article>
                 </section>
 
+                {/* O que precisa de atenção */}
+                {attentionItems.length > 0 && (
+                  <section className="attention-card" aria-labelledby="attention-title">
+                    <div className="attention-card-head">
+                      <span className="attention-card-icon" aria-hidden="true">⚠️</span>
+                      <h2 id="attention-title" className="attention-card-title">O que precisa de atenção</h2>
+                    </div>
+                    <ul className="attention-list">
+                      {attentionItems.map((item) => (
+                        <li key={item.key} className="attention-item">
+                          <span className="attention-item-icon" aria-hidden="true">{item.icon}</span>
+                          <span className="attention-item-text">{item.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
                 {/* Próximas tarefas + resumo financeiro */}
                 <div className="dashboard-columns">
                   <section className="dashboard-panel" aria-labelledby="upcoming-title">
@@ -442,18 +550,31 @@ export function EventDashboard({
                       <button type="button" className="link-btn" onClick={onOpenTasks}>Ver Kanban Completo →</button>
                     </div>
 
-                    {pendingTasks.length === 0 ? (
+                    {upcomingTasks.length === 0 ? (
                       <p className="guest-list-empty">Nenhuma tarefa pendente. 🎉</p>
                     ) : (
                       <ul className="task-list-dash">
-                        {pendingTasks.map((task) => {
+                        {upcomingTasks.map((task) => {
                           const p = PRIORITY_BADGE[task.priority] ?? PRIORITY_BADGE.low
+                          const favorite = task.priority === 'high'
                           return (
                             <li key={task.id} className={`task-row-dash${task.completed ? ' is-done' : ''}`}>
-                              <label className="task-check">
-                                <input type="checkbox" checked={task.completed} onChange={() => void toggleTask(task)} aria-label={`Concluir ${task.title}`} />
-                                <span className="task-check-title">{task.title}</span>
-                              </label>
+                              <div className="task-row-dash-top">
+                                <label className="task-check">
+                                  <input type="checkbox" checked={task.completed} onChange={() => void toggleTask(task)} aria-label={`Concluir ${task.title}`} />
+                                  <span className="task-check-title">{task.title}</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  className="task-star"
+                                  aria-label={favorite ? `Remover ${task.title} dos favoritos` : `Favoritar ${task.title}`}
+                                  aria-pressed={favorite}
+                                  title={favorite ? 'Remover dos favoritos' : 'Favoritar'}
+                                  onClick={() => void toggleFavorite(task)}
+                                >
+                                  {favorite ? '⭐' : '☆'}
+                                </button>
+                              </div>
                               <div className="task-row-meta">
                                 {task.category && <span className="task-cat">{task.category}</span>}
                                 <span className={`task-priority ${p.className}`}>{p.label}</span>
@@ -521,4 +642,3 @@ export function EventDashboard({
     </div>
   )
 }
-
