@@ -1007,6 +1007,13 @@
   gap: 1rem 1.25rem;
 }
 
+.form-grid-col-4 {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem 1.25rem;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;

@@ -154,6 +154,8 @@ export interface Event {
   description: string | null
   client_name_1: string | null // Nome do destaque (noiva, aniversariante, empresa)
   client_name_2: string | null // Nome secundário (noivo, co-anfitrião) — opcional
+  client_role_1: string | null // Relação/papel (Noiva, Aniversariante)
+  client_role_2: string | null // Relação/papel (Noivo, Padrinho)
   date: string | null
   location: string | null
   guest_count: number | null

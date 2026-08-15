@@ -40,6 +40,15 @@ export function EventView() {
     window.history.replaceState(null, '', url.toString())
   }, [initialJoinCode])
 
+  // Após autenticar, recarrega a lista de eventos (useEvent monta antes do
+  // login e a busca inicial volta vazia sem sessão válida).
+  useEffect(() => {
+    if (user && !event && !eventLoading) {
+      void refresh()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, event, eventLoading])
+
   const handleRefresh = () => {
     void refresh()
   }

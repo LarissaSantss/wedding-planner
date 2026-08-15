@@ -31,7 +31,9 @@ interface FormState {
   event_type: EventType
   status: EventStatus
   client_name_1: string
+  client_role_1: string
   client_name_2: string
+  client_role_2: string
   date: string
   location: string
   budget: string
@@ -65,7 +67,9 @@ export function EventSettings({ event, onSave }: EventSettingsProps) {
     event_type: event.event_type,
     status: event.status,
     client_name_1: event.client_name_1 ?? '',
+    client_role_1: event.client_role_1 ?? '',
     client_name_2: event.client_name_2 ?? '',
+    client_role_2: event.client_role_2 ?? '',
     date: event.date ?? '',
     location: event.location ?? '',
     budget: event.budget !== null && event.budget !== undefined ? String(event.budget) : '',
@@ -120,7 +124,9 @@ export function EventSettings({ event, onSave }: EventSettingsProps) {
       event_type: form.event_type,
       status: form.status,
       client_name_1: form.client_name_1.trim() || null,
+      client_role_1: form.client_role_1.trim() || null,
       client_name_2: form.client_name_2.trim() || null,
+      client_role_2: form.client_role_2.trim() || null,
       date: form.date || null,
       location: form.location.trim() || null,
       budget: form.budget ? Number(form.budget) : null,
@@ -211,28 +217,51 @@ export function EventSettings({ event, onSave }: EventSettingsProps) {
                   </select>
                 </div>
 
-                <div className="form-field">
-                  <label className="form-label" htmlFor="client-1">Nome principal</label>
-                  <input
-                    id="client-1"
-                    className="form-control"
-                    type="text"
-                    value={form.client_name_1}
-                    onChange={(e) => updateField('client_name_1', e.target.value)}
-                    placeholder="Ex: Ana"
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label className="form-label" htmlFor="client-2">Nome secundário</label>
-                  <input
-                    id="client-2"
-                    className="form-control"
-                    type="text"
-                    value={form.client_name_2}
-                    onChange={(e) => updateField('client_name_2', e.target.value)}
-                    placeholder="Ex: Bruno (opcional)"
-                  />
+                <div className="form-grid-col-4">
+                  <div className="form-field">
+                    <label className="form-label" htmlFor="client-1">Nome principal</label>
+                    <input
+                      id="client-1"
+                      className="form-control"
+                      type="text"
+                      value={form.client_name_1}
+                      onChange={(e) => updateField('client_name_1', e.target.value)}
+                      placeholder="Ex: Ana"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label" htmlFor="client-role-1">Papel principal</label>
+                    <input
+                      id="client-role-1"
+                      className="form-control"
+                      type="text"
+                      value={form.client_role_1}
+                      onChange={(e) => updateField('client_role_1', e.target.value)}
+                      placeholder="Ex: Noiva"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label" htmlFor="client-2">Nome secundário</label>
+                    <input
+                      id="client-2"
+                      className="form-control"
+                      type="text"
+                      value={form.client_name_2}
+                      onChange={(e) => updateField('client_name_2', e.target.value)}
+                      placeholder="Ex: Bruno (opcional)"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label" htmlFor="client-role-2">Papel secundário</label>
+                    <input
+                      id="client-role-2"
+                      className="form-control"
+                      type="text"
+                      value={form.client_role_2}
+                      onChange={(e) => updateField('client_role_2', e.target.value)}
+                      placeholder="Ex: Noivo"
+                    />
+                  </div>
                 </div>
 
                 <div className="form-field">

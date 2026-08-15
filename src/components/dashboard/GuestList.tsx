@@ -21,11 +21,17 @@ interface CompanionDraft {
 }
 
 function invitedByLabel(event: Event, value: Guest['invited_by']): string {
-  const a = event.client_name_1 ?? 'Noiva'
-  const b = event.client_name_2 ?? 'Noivo'
-  if (value === 'client_1') return a
-  if (value === 'client_2') return b
-  if (value === 'both') return `${a} & ${b}`
+  const name1 = event.client_name_1
+  const role1 = event.client_role_1
+  const label1 = [name1, role1].filter(Boolean).join(' - ') || 'Anfitrião 1'
+
+  const name2 = event.client_name_2
+  const role2 = event.client_role_2
+  const label2 = [name2, role2].filter(Boolean).join(' - ') || 'Anfitrião 2'
+
+  if (value === 'client_1') return label1
+  if (value === 'client_2') return label2
+  if (value === 'both') return `${label1} & ${label2}`
   return 'A definir'
 }
 
@@ -302,8 +308,8 @@ export function GuestList({ event }: GuestListProps) {
         />
         <div className="guest-filters">
           <button type="button" className={`guest-pill${filter === 'all' ? ' is-active' : ''}`} onClick={() => setFilter('all')}>Todos</button>
-          <button type="button" className={`guest-pill${filter === 'client_1' ? ' is-active' : ''}`} onClick={() => setFilter('client_1')}>{event.client_name_1 ?? 'Noiva'}</button>
-          <button type="button" className={`guest-pill${filter === 'client_2' ? ' is-active' : ''}`} onClick={() => setFilter('client_2')}>{event.client_name_2 ?? 'Noivo'}</button>
+          <button type="button" className={`guest-pill${filter === 'client_1' ? ' is-active' : ''}`} onClick={() => setFilter('client_1')}>{invitedByLabel(event, 'client_1')}</button>
+          <button type="button" className={`guest-pill${filter === 'client_2' ? ' is-active' : ''}`} onClick={() => setFilter('client_2')}>{invitedByLabel(event, 'client_2')}</button>
           <button type="button" className={`guest-pill${filter === 'both' ? ' is-active' : ''}`} onClick={() => setFilter('both')}>Ambos</button>
           <button type="button" className={`guest-pill${filter === 'none' ? ' is-active' : ''}`} onClick={() => setFilter('none')}>Sem classificação</button>
           <button type="button" className={`guest-pill${filter === '3' ? ' is-active' : ''}`} onClick={() => setFilter('3')}>⭐⭐⭐</button>
@@ -434,8 +440,8 @@ export function GuestList({ event }: GuestListProps) {
                   <label className="form-label" htmlFor="g-invited">Convidado de</label>
                   <select id="g-invited" className="form-control" value={form.invited_by} onChange={(e) => setForm((f) => ({ ...f, invited_by: e.target.value }))}>
                     <option value="">Ainda não definido</option>
-                    <option value="client_1">{event.client_name_1 ?? 'Noiva'}</option>
-                    <option value="client_2">{event.client_name_2 ?? 'Noivo'}</option>
+                    <option value="client_1">{invitedByLabel(event, 'client_1')}</option>
+                    <option value="client_2">{invitedByLabel(event, 'client_2')}</option>
                     <option value="both">Ambos</option>
                   </select>
                 </div>
