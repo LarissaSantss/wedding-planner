@@ -15,7 +15,12 @@ import type {
   CompanionRelationship,
 } from '../../lib/supabase/types'
 import { getThemeStyle } from '../../utils/theme'
-import { COMPANION_RELATIONSHIP_LABELS, COMPANION_RELATIONSHIP_LIST } from '../../utils/eventFormat'
+import {
+  COMPANION_RELATIONSHIP_LABELS,
+  COMPANION_RELATIONSHIP_LIST,
+  getRelationshipOptions,
+  PRIORITY_LABELS,
+} from '../../utils/eventFormat'
 import { CreatableGroupSelect } from './CreatableGroupSelect'
 import {
   fetchCompanionsByGuest,
@@ -33,6 +38,8 @@ import {
   fetchGuestRoleAssignments,
   fetchGuestRoleVotes,
   upsertGuestRoleVote,
+  fetchEventMembers,
+  updateGuest,
 } from '../../lib/supabase/database'
 
 interface GuestDetailProps {
@@ -45,6 +52,12 @@ interface GuestDetailProps {
   groups?: GuestGroup[]
   onCreateGroup?: (name: string) => Promise<GuestGroup | null>
   onDelete?: () => void
+}
+
+interface Member {
+  user_id: string
+  full_name: string | null
+  email: string | null
 }
 
 function roleVoteSummary(votes: GuestRoleVote[], assignmentId: string): GuestRoleVoteStatus {
@@ -89,19 +102,29 @@ export function GuestDetail({
   const [roles, setRoles] = useState<GuestRole[]>([])
   const [assignments, setAssignments] = useState<GuestRoleAssignment[]>([])
   const [roleVotes, setRoleVotes] = useState<GuestRoleVote[]>([])
+  const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
 
   const [companionName, setCompanionName] = useState('')
   const [relationship, setRelationship] = useState<CompanionRelationship>('friend')
   const [commentText, setCommentText] = useState('')
 
+  // Informações & vínculo (edição inline)
+  const [editName, setEditName] = useState(guest.name)
+  const [editRelationship, setEditRelationship] = useState(guest.relationship_to_event ?? '')
+  const [editPriority, setEditPriority] = useState(guest.priority ? String(guest.priority) : '')
+  const [savingInfo, setSavingInfo] = useState(false)
+  const [infoSaved, setInfoSaved] = useState(false)
+
   // Papéis
   const [selectedRoleId, setSelectedRoleId] = useState('')
   const [assignmentTargetId, setAssignmentTargetId] = useState('__guest__')
 
+  const relationshipOptions = getRelationshipOptions(event.event_type)
+
   const load = useCallback(async () => {
     setLoading(true)
-    const [companionsRes, votesRes, commentsRes, rolesRes, assignmentsRes, roleVotesRes] =
+    const [companionsRes, votesRes, commentsRes, rolesRes, assignmentsRes, roleVotesRes, membersRes] =
       await Promise.all([
         fetchCompanionsByGuest(guest.id),
         fetchVotesByGuest(guest.id),
@@ -109,6 +132,7 @@ export function GuestDetail({
         fetchGuestRoles(event.id),
         fetchGuestRoleAssignments(event.id),
         fetchGuestRoleVotes(event.id),
+        fetchEventMembers(event.id),
       ])
     setCompanions(companionsRes.data ?? [])
     setVotes(votesRes.data ?? [])
@@ -116,6 +140,7 @@ export function GuestDetail({
     setRoles(rolesRes.data ?? [])
     setAssignments(assignmentsRes.data ?? [])
     setRoleVotes(roleVotesRes.data ?? [])
+    setMembers((membersRes.data as Member[]) ?? [])
     setLoading(false)
   }, [guest.id, event.id])
 
@@ -209,8 +234,28 @@ export function GuestDetail({
     }
   }
 
+  const handleSaveInfo = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editName.trim()) return
+    setSavingInfo(true)
+    await updateGuest(guest.id, {
+      name: editName.trim(),
+      relationship_to_event: editRelationship || null,
+      priority: editPriority ? (Number(editPriority) as Guest['priority']) : null,
+    })
+    setSavingInfo(false)
+    setInfoSaved(true)
+    setTimeout(() => setInfoSaved(false), 2000)
+  }
+
   const agreeCount = votes.filter((v) => v.vote === 'agree').length
   const disagreeCount = votes.filter((v) => v.vote === 'disagree').length
+  const hasDivergence = agreeCount > 0 && disagreeCount > 0
+
+  const memberName = (userId: string) =>
+    members.find((m) => m.user_id === userId)?.full_name ??
+    members.find((m) => m.user_id === userId)?.email ??
+    'Organizador'
 
   const ownAssignments = assignments.filter(
     (a) => a.guest_id === guest.id || companions.some((c) => c.id === a.companion_id),
@@ -253,23 +298,157 @@ export function GuestDetail({
           </div>
         ) : (
           <div className="guest-drawer-body">
-            {/* Grupo */}
-            {onGroupChange && onCreateGroup && (
-              <div className="form-field" style={{ marginBottom: '0.75rem' }}>
-                <label className="form-label" htmlFor="guest-detail-group">Grupo</label>
-                <CreatableGroupSelect
-                  groups={groups}
-                  value={guest.group_id ?? ''}
-                  onChange={(value) => onGroupChange(guest.id, value)}
-                  onCreate={onCreateGroup}
-                  inputId="guest-detail-group"
-                />
-              </div>
-            )}
-
-            {/* Papéis e votação do casal */}
+            {/* Informações & Vínculo */}
             <section className="guest-drawer-section">
-              <h3 className="guest-drawer-section-title">Papéis e votação do casal</h3>
+              <h3 className="guest-drawer-section-title">Informações & Vínculo</h3>
+              <form onSubmit={handleSaveInfo} className="guest-info-form">
+                <div className="form-field">
+                  <label className="form-label" htmlFor="gd-name">Nome</label>
+                  <input
+                    id="gd-name"
+                    className="form-control"
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="gd-rel">Relação com o evento</label>
+                  <select
+                    id="gd-rel"
+                    className="form-control"
+                    value={editRelationship}
+                    onChange={(e) => setEditRelationship(e.target.value)}
+                  >
+                    <option value="">Selecionar...</option>
+                    {relationshipOptions.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="gd-priority">Prioridade</label>
+                  <select
+                    id="gd-priority"
+                    className="form-control"
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(e.target.value)}
+                  >
+                    <option value="">A definir</option>
+                    <option value="3">{PRIORITY_LABELS[3]}</option>
+                    <option value="2">{PRIORITY_LABELS[2]}</option>
+                    <option value="1">{PRIORITY_LABELS[1]}</option>
+                  </select>
+                </div>
+                {onGroupChange && onCreateGroup && (
+                  <div className="form-field">
+                    <label className="form-label" htmlFor="guest-detail-group">Grupo</label>
+                    <CreatableGroupSelect
+                      groups={groups}
+                      value={guest.group_id ?? ''}
+                      onChange={(value) => onGroupChange(guest.id, value)}
+                      onCreate={onCreateGroup}
+                      inputId="guest-detail-group"
+                    />
+                  </div>
+                )}
+                <div className="guest-info-actions">
+                  <button type="submit" className="btn-primary" disabled={savingInfo || !editName.trim()}>
+                    {savingInfo ? 'Salvando...' : 'Salvar'}
+                  </button>
+                  {infoSaved && <span className="save-feedback">✓ Salvo</span>}
+                </div>
+              </form>
+            </section>
+
+            {/* Acompanhantes */}
+            <section className="guest-drawer-section">
+              <h3 className="guest-drawer-section-title">Acompanhantes</h3>
+              {companions.length === 0 ? (
+                <p className="guest-drawer-empty">Nenhum acompanhante.</p>
+              ) : (
+                <ul className="companion-list">
+                  {companions.map((c) => (
+                    <li key={c.id} className="companion-item">
+                      <span>
+                        {c.name} · {COMPANION_RELATIONSHIP_LABELS[c.relationship]}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => void handleRemoveCompanion(c.id)}
+                      >
+                        Remover
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <form onSubmit={handleAddCompanion} className="companion-form">
+                <input
+                  className="form-control"
+                  type="text"
+                  value={companionName}
+                  onChange={(e) => setCompanionName(e.target.value)}
+                  placeholder="Nome do acompanhante"
+                />
+                <select
+                  className="form-control"
+                  value={relationship}
+                  onChange={(e) => setRelationship(e.target.value as CompanionRelationship)}
+                  aria-label="Relação"
+                >
+                  {COMPANION_RELATIONSHIP_LIST.map((rel) => (
+                    <option key={rel} value={rel}>
+                      {COMPANION_RELATIONSHIP_LABELS[rel]}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="btn-primary" disabled={!companionName.trim()}>
+                  Adicionar
+                </button>
+              </form>
+            </section>
+
+            {/* Votação do Casal */}
+            <section className="guest-drawer-section">
+              <h3 className="guest-drawer-section-title">Votação do casal</h3>
+              {hasDivergence && (
+                <p className="vote-divergence" role="alert">
+                  ⚠️ Divergência entre organizadores
+                </p>
+              )}
+              <div className="vote-summary">
+                <span className="vote-agree">✓ {agreeCount} concordam</span>
+                <span className="vote-disagree">✗ {disagreeCount} discordam</span>
+              </div>
+              <div className="vote-list">
+                {votes.length === 0 && <p className="guest-drawer-empty">Nenhum voto ainda.</p>}
+                {votes.map((v) => (
+                  <span key={v.id} className={`vote-chip vote-chip-${v.vote}`}>
+                    {memberName(v.user_id)} · {v.vote === 'agree' ? '👍 Concorda' : '👎 Discorda'}
+                  </span>
+                ))}
+              </div>
+              {canVote && (
+                <div className="vote-actions">
+                  <button type="button" className="btn-primary" onClick={() => void handleVote('agree')}>
+                    👍 Concordar
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => void handleVote('disagree')}>
+                    👎 Discordar
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => void handleRemoveVote()}>
+                    Remover meu voto
+                  </button>
+                </div>
+              )}
+            </section>
+
+            {/* Papéis e votação de papel */}
+            <section className="guest-drawer-section">
+              <h3 className="guest-drawer-section-title">Papéis especiais</h3>
 
               <div className="role-assign-form">
                 <select
@@ -354,97 +533,17 @@ export function GuestDetail({
               )}
             </section>
 
-            {/* Acompanhantes */}
+            {/* Comentários / Discussão */}
             <section className="guest-drawer-section">
-              <h3 className="guest-drawer-section-title">Acompanhantes</h3>
-              {companions.length === 0 ? (
-                <p className="guest-drawer-empty">Nenhum acompanhante.</p>
-              ) : (
-                <ul className="companion-list">
-                  {companions.map((c) => (
-                    <li key={c.id} className="companion-item">
-                      <span>
-                        {c.name} · {COMPANION_RELATIONSHIP_LABELS[c.relationship]}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => void handleRemoveCompanion(c.id)}
-                      >
-                        Remover
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <form onSubmit={handleAddCompanion} className="companion-form">
-                <input
-                  className="form-control"
-                  type="text"
-                  value={companionName}
-                  onChange={(e) => setCompanionName(e.target.value)}
-                  placeholder="Nome do acompanhante"
-                />
-                <select
-                  className="form-control"
-                  value={relationship}
-                  onChange={(e) => setRelationship(e.target.value as CompanionRelationship)}
-                  aria-label="Relação"
-                >
-                  {COMPANION_RELATIONSHIP_LIST.map((rel) => (
-                    <option key={rel} value={rel}>
-                      {COMPANION_RELATIONSHIP_LABELS[rel]}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" className="btn-primary" disabled={!companionName.trim()}>
-                  Adicionar
-                </button>
-              </form>
-            </section>
-
-            {/* Votação */}
-            <section className="guest-drawer-section">
-              <h3 className="guest-drawer-section-title">Votação</h3>
-              <div className="vote-summary">
-                <span className="vote-agree">✓ {agreeCount} concordam</span>
-                <span className="vote-disagree">✗ {disagreeCount} discordam</span>
-              </div>
-              <div className="vote-list">
-                {votes.length === 0 && <p className="guest-drawer-empty">Nenhum voto ainda.</p>}
-                {votes.map((v) => (
-                  <span key={v.id} className={`vote-chip vote-chip-${v.vote}`}>
-                    Membro · {v.vote === 'agree' ? '✓' : '✗'}
-                  </span>
-                ))}
-              </div>
-              {canVote && (
-                <div className="vote-actions">
-                  <button type="button" className="btn-primary" onClick={() => void handleVote('agree')}>
-                    Concordar
-                  </button>
-                  <button type="button" className="btn-secondary" onClick={() => void handleVote('disagree')}>
-                    Discordar
-                  </button>
-                  <button type="button" className="btn-secondary" onClick={() => void handleRemoveVote()}>
-                    Remover meu voto
-                  </button>
-                </div>
-              )}
-            </section>
-
-            {/* Discussão */}
-            <section className="guest-drawer-section">
-              <h3 className="guest-drawer-section-title">Discussão</h3>
+              <h3 className="guest-drawer-section-title">Comentários</h3>
               {comments.length === 0 ? (
-                <p className="guest-drawer-empty">Nenhum comentário ainda.</p>
+                <p className="guest-drawer-empty">Nenhum comentário ainda. Use @ para mencionar alguém.</p>
               ) : (
                 <ul className="comment-list">
                   {comments.map((c) => (
                     <li key={c.id} className="comment-item">
                       <div className="comment-meta">
-                        <span className="comment-author">Membro</span>
+                        <span className="comment-author">{memberName(c.user_id)}</span>
                         <span className="comment-date">
                           {new Date(c.created_at).toLocaleString('pt-BR')}
                         </span>
@@ -468,7 +567,7 @@ export function GuestDetail({
                     type="text"
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Escreva um comentário..."
+                    placeholder="Escreva um comentário... use @nome para mencionar"
                   />
                   <button type="submit" className="btn-primary" disabled={!commentText.trim()}>
                     Comentar

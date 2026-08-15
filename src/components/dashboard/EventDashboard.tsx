@@ -447,9 +447,12 @@ export function EventDashboard({
                     {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]} · {EVENT_STATUS_LABELS[event.status]}
                   </span>
                   <h1 className="event-hero-title">
-                    {EVENT_TYPE_LABELS[event.event_type]} {coupleText ?? event.title}
+                    {coupleText ?? event.title}
                   </h1>
-                  {coupleText && <p className="event-hero-couple">{event.title}</p>}
+                  {coupleText && event.title !== coupleText && (
+                    <p className="event-hero-couple">{event.title}</p>
+                  )}
+
                   {countdownText && (
                     <p className="event-hero-countdown-text">✨ {countdownText}</p>
                   )}

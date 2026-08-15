@@ -25,21 +25,24 @@ export interface MyPermissions {
   is_owner: boolean
 }
 
+export interface AddGuestValues {
+  name: string
+  email?: string | null
+  phone?: string | null
+  group_id?: string | null
+  notes?: string | null
+  priority?: GuestPriority | null
+  invited_by?: Guest['invited_by']
+  relationship_to_event?: string | null
+}
+
 export interface GuestModule {
   guests: Guest[]
   groups: GuestGroup[]
   loading: boolean
   error: string | null
   permissions: MyPermissions
-  addGuest: (values: {
-    name: string
-    email?: string | null
-    phone?: string | null
-    group_id?: string | null
-    notes?: string | null
-    priority?: GuestPriority | null
-    invited_by?: Guest['invited_by']
-  }) => Promise<Guest | null>
+  addGuest: (values: AddGuestValues) => Promise<Guest | null>
   addGuests: (names: string[]) => Promise<number>
   removeGuest: (id: string) => Promise<void>
   updateGuest: (id: string, values: Partial<Guest>) => Promise<void>
@@ -103,15 +106,7 @@ export function useGuestModule(eventId: string): GuestModule {
   }, [eventId])
 
   const addGuest = useCallback(
-    async (values: {
-      name: string
-      email?: string | null
-      phone?: string | null
-      group_id?: string | null
-      notes?: string | null
-      priority?: GuestPriority | null
-      invited_by?: Guest['invited_by']
-    }): Promise<Guest | null> => {
+    async (values: AddGuestValues): Promise<Guest | null> => {
       const { data, error: createError } = await createGuest({
         event_id: eventId,
         name: values.name,
@@ -121,6 +116,7 @@ export function useGuestModule(eventId: string): GuestModule {
         notes: values.notes ?? null,
         priority: values.priority ?? null,
         invited_by: values.invited_by ?? null,
+        relationship_to_event: values.relationship_to_event ?? null,
       })
 
       if (createError || !data) {

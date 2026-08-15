@@ -1098,6 +1098,25 @@ export async function deleteCompanion(id: string): Promise<{ error: Error | null
   return deleteRecord('guest_companions', id)
 }
 
+/**
+ * Busca todos os acompanhantes de um evento (join via guests).
+ * Usado no contador de lugares do buffet e nos indicadores dos cards.
+ */
+export async function fetchCompanionsByEvent(
+  eventId: string,
+): Promise<QueryListResult<GuestCompanion>> {
+  const { data, error } = await supabase
+    .from('guest_companions')
+    .select('*, guests!inner(event_id)')
+    .eq('guests.event_id', eventId)
+  const rows = (data ?? []).map((row) => {
+    const companion = { ...(row as Record<string, unknown>) }
+    delete companion.guests
+    return companion as unknown as GuestCompanion
+  })
+  return { data: rows, error }
+}
+
 // ========== OPERAÇÕES ESPECÍFICAS: VOTOS ==========
 
 /** Busca os votos de um convidado. */
@@ -1106,6 +1125,28 @@ export async function fetchVotesByGuest(
 ): Promise<QueryListResult<GuestVote>> {
   return fetchWithFilter<GuestVote>('guest_votes', { guest_id: guestId })
 }
+
+/**
+ * Busca todos os votos de um evento (join via guests).
+ * Usado na votação rápida exibida nos cards da listagem.
+ */
+export async function fetchVotesByEvent(
+  eventId: string,
+): Promise<QueryListResult<GuestVote>> {
+  const { data, error } = await supabase
+    .from('guest_votes')
+    .select('*, guests!inner(event_id)')
+    .eq('guests.event_id', eventId)
+  const rows = (data ?? []).map((row) => {
+    const vote = { ...(row as Record<string, unknown>) }
+    delete vote.guests
+    return vote as unknown as GuestVote
+  })
+  return { data: rows, error }
+}
+
+
+
 
 /**
  * Cria ou substitui o voto do usuário atual em um convidado.

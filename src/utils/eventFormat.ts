@@ -49,6 +49,77 @@ export const GUEST_RELATIONSHIP_OPTIONS = [
   'Outro',
 ] as const
 
+/**
+ * Relações com o evento, contextualizadas por tipo.
+ * Armazenadas como chave flexível (string), nunca engessadas em casamento.
+ * Cada tipo de evento expõe seu próprio conjunto; 'other' é o fallback.
+ */
+export const RELATIONSHIP_OPTIONS_BY_EVENT_TYPE: Record<EventType, readonly string[]> = {
+  wedding: GUEST_RELATIONSHIP_OPTIONS,
+  debutante: [
+    'Mãe da debutante',
+    'Pai da debutante',
+    'Madrinha',
+    'Padrinho',
+    'Amiga da debutante',
+    'Amigo da debutante',
+    'Familiar',
+    'Colega de escola',
+    'Outro',
+  ],
+  birthday: [
+    'Mãe do(a) aniversariante',
+    'Pai do(a) aniversariante',
+    'Cônjuge',
+    'Filho(a)',
+    'Amigo(a)',
+    'Familiar',
+    'Colega de trabalho',
+    'Outro',
+  ],
+  anniversary: [
+    'Filho(a) do casal',
+    'Neto(a)',
+    'Padrinho',
+    'Madrinha',
+    'Amigo(a) do casal',
+    'Familiar',
+    'Outro',
+  ],
+  corporate: [
+    'Sócio(a)',
+    'Funcionário(a)',
+    'Cliente',
+    'Parceiro(a) de negócios',
+    'Fornecedor(a)',
+    'Imprensa',
+    'Outro',
+  ],
+  graduation: [
+    'Mãe do(a) formando(a)',
+    'Pai do(a) formando(a)',
+    'Cônjuge',
+    'Amigo(a) de turma',
+    'Professor(a)',
+    'Familiar',
+    'Outro',
+  ],
+  other: ['Familiar', 'Amigo(a)', 'Colega', 'Conhecido(a)', 'Outro'],
+}
+
+/** Retorna as relações contextuais para o tipo de evento. */
+export function getRelationshipOptions(eventType: EventType): readonly string[] {
+  return RELATIONSHIP_OPTIONS_BY_EVENT_TYPE[eventType] ?? RELATIONSHIP_OPTIONS_BY_EVENT_TYPE.other
+}
+
+/** Rótulos explicativos de prioridade (1–3 estrelas). */
+export const PRIORITY_LABELS: Record<1 | 2 | 3, string> = {
+  3: '⭐⭐⭐ Indispensável',
+  2: '⭐⭐ Desejável',
+  1: '⭐ Se houver disponibilidade',
+}
+
+
 /** Emoji/ícone por tipo de evento (usado como marca visual na interface) */
 export const EVENT_TYPE_ICONS: Record<EventType, string> = {
   wedding: '💍',
