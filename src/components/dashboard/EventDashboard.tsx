@@ -83,6 +83,16 @@ const PRIORITY_BADGE: Record<TaskPriority, { label: string; className: string }>
   low: { label: 'Baixa', className: 'is-outline' },
 }
 
+function initials(name: string | null | undefined, email: string | null | undefined): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/)
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    return name.trim().slice(0, 2).toUpperCase()
+  }
+  if (email) return email.slice(0, 2).toUpperCase()
+  return '?'
+}
+
 /**
  * Dashboard principal do LUNA — centro de comando do evento.
  * Redesign visual "Wedding Editorial": hero editorial, faixa de progresso,

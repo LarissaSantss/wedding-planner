@@ -195,6 +195,8 @@ export interface GuestGroup {
   id: string
   event_id: string
   name: string
+  color: string
+  sort_order: number
   created_at: string
   updated_at: string
 }
@@ -215,6 +217,10 @@ export interface GuestRole {
   event_id: string
   name: string
   is_special: boolean
+  description: string | null
+  icon: string
+  color: string
+  allow_multiple: boolean
   created_at: string
 }
 
@@ -471,7 +477,8 @@ export type GuestUpdate = Partial<
 >
 
 /** Dados para criação de um grupo */
-export type GuestGroupInsert = Pick<GuestGroup, 'name' | 'event_id'>
+export type GuestGroupInsert = Pick<GuestGroup, 'name' | 'event_id'> &
+  Partial<Pick<GuestGroup, 'color' | 'sort_order'>>
 
 /** Dados para atualização de um grupo */
 export type GuestGroupUpdate = Partial<Omit<GuestGroup, 'id' | 'event_id' | 'created_at' | 'updated_at'>>
