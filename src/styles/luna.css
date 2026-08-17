@@ -1,0 +1,1106 @@
+/* ==========================================================================
+   LUNA — Design System
+   Direção: Wedding Editorial + Luxury Planner + Modern SaaS.
+   Fundo ivory, vinho como cor de ação/identidade, champagne como detalhe
+   premium raro, tipografia editorial (Fraunces) + funcional (Inter).
+   Escopo: aplicado dentro de `.luna` para conviver com telas legadas.
+   ========================================================================== */
+
+.luna {
+  /* ----- Paleta ----- */
+  --luna-ivory: #faf7f5;
+  --luna-blush: #e8c8c8;
+  --luna-wine: #701c32;
+  --luna-wine-hover: #5d1729;
+  --luna-wine-soft: rgba(112, 28, 50, 0.07);
+  --luna-champagne: #d8b878;
+  --luna-taupe: #8d7b78;
+  --luna-graphite: #302a2b;
+
+  --luna-bg: var(--luna-ivory);
+  --luna-surface: #ffffff;
+  --luna-text: var(--luna-graphite);
+  --luna-text-muted: var(--luna-taupe);
+  --luna-text-faint: #b3a7a4;
+  --luna-line: #ece3e0;      /* hairline principal */
+  --luna-line-strong: #ddd0cc;
+
+  /* ----- Tipografia ----- */
+  --luna-font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --luna-font-body: 'Inter', system-ui, 'Segoe UI', sans-serif;
+
+  /* ----- Radius ----- */
+  --luna-radius-sm: 8px;
+  --luna-radius: 12px;
+  --luna-radius-lg: 16px;
+  --luna-radius-pill: 999px;
+
+  /* ----- Sombras (quase invisíveis; profundidade vem de hairlines) ----- */
+  --luna-shadow-sm: 0 1px 2px rgba(48, 42, 43, 0.04);
+  --luna-shadow: 0 1px 2px rgba(48, 42, 43, 0.03), 0 8px 24px rgba(48, 42, 43, 0.05);
+  --luna-shadow-lg: 0 2px 6px rgba(48, 42, 43, 0.05), 0 24px 48px rgba(48, 42, 43, 0.1);
+
+  /* ----- Movimento ----- */
+  --luna-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --luna-fast: 160ms;
+  --luna-med: 240ms;
+
+  background: var(--luna-bg);
+  color: var(--luna-text);
+  font-family: var(--luna-font-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==========================================================================
+   Tipografia
+   ========================================================================== */
+.luna-display {
+  font-family: var(--luna-font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--luna-text);
+}
+
+.luna-h1 {
+  font-family: var(--luna-font-display);
+  font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.08;
+  color: var(--luna-text);
+  margin: 0;
+}
+
+.luna-h2 {
+  font-family: var(--luna-font-display);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--luna-text);
+  margin: 0;
+}
+
+.luna-h3 {
+  font-family: var(--luna-font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--luna-text);
+  margin: 0;
+}
+
+.luna-eyebrow {
+  font-family: var(--luna-font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--luna-text-muted);
+  margin: 0;
+}
+
+.luna-lead {
+  font-size: 0.95rem;
+  color: var(--luna-text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.luna-caption {
+  font-size: 0.8rem;
+  color: var(--luna-text-muted);
+  margin: 0;
+}
+
+.luna-num {
+  font-family: var(--luna-font-display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--luna-text);
+}
+
+/* ==========================================================================
+   Botões
+   ========================================================================== */
+.luna-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--luna-font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.625rem 1.125rem;
+  border-radius: var(--luna-radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color var(--luna-fast) var(--luna-ease),
+    border-color var(--luna-fast) var(--luna-ease),
+    color var(--luna-fast) var(--luna-ease),
+    transform var(--luna-fast) var(--luna-ease),
+    box-shadow var(--luna-fast) var(--luna-ease);
+}
+
+.luna-btn:focus-visible {
+  outline: 2px solid var(--luna-wine);
+  outline-offset: 2px;
+}
+
+.luna-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.luna-btn-primary {
+  background: var(--luna-wine);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(112, 28, 50, 0.2);
+}
+
+.luna-btn-primary:hover:not(:disabled) {
+  background: var(--luna-wine-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(112, 28, 50, 0.24);
+}
+
+.luna-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.luna-btn-secondary {
+  background: transparent;
+  color: var(--luna-text);
+  border-color: var(--luna-line-strong);
+}
+
+.luna-btn-secondary:hover:not(:disabled) {
+  background: var(--luna-wine-soft);
+  border-color: var(--luna-wine);
+  color: var(--luna-wine);
+}
+
+.luna-btn-ghost {
+  background: transparent;
+  color: var(--luna-text-muted);
+  padding-inline: 0.75rem;
+}
+
+.luna-btn-ghost:hover:not(:disabled) {
+  color: var(--luna-wine);
+  background: var(--luna-wine-soft);
+}
+
+.luna-btn-danger {
+  background: transparent;
+  color: #b03a4b;
+  border-color: color-mix(in srgb, #b03a4b 30%, transparent);
+}
+
+.luna-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #b03a4b 8%, transparent);
+  border-color: #b03a4b;
+}
+
+/* Link de ação discreto */
+.luna-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--luna-font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--luna-wine);
+  cursor: pointer;
+  transition: color var(--luna-fast) var(--luna-ease);
+}
+
+.luna-link:hover {
+  color: var(--luna-wine-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ==========================================================================
+   Painéis, hairlines e cartões
+   ========================================================================== */
+.luna-panel {
+  background: var(--luna-surface);
+  border: 1px solid var(--luna-line);
+  border-radius: var(--luna-radius-lg);
+  box-shadow: var(--luna-shadow-sm);
+}
+
+.luna-panel-pad {
+  padding: 1.5rem;
+}
+
+.luna-hairline {
+  border: none;
+  border-top: 1px solid var(--luna-line);
+  margin: 0;
+}
+
+.luna-section {
+  margin-bottom: 2.25rem;
+}
+
+.luna-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.125rem;
+}
+
+/* ==========================================================================
+   Badges / chips / pills
+   ========================================================================== */
+.luna-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.625rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: var(--luna-radius-pill);
+  background: var(--luna-wine-soft);
+  color: var(--luna-wine);
+  border: 1px solid transparent;
+}
+
+.luna-badge.is-outline {
+  background: transparent;
+  border-color: var(--luna-line-strong);
+  color: var(--luna-text-muted);
+}
+
+.luna-badge.is-champagne {
+  background: color-mix(in srgb, var(--luna-champagne) 18%, transparent);
+  color: #7a5a1e;
+}
+
+.luna-badge.is-success {
+  background: color-mix(in srgb, #2e7d5b 12%, transparent);
+  color: #1f5c42;
+}
+
+.luna-badge.is-danger {
+  background: color-mix(in srgb, #b03a4b 10%, transparent);
+  color: #8f2f3e;
+}
+
+.luna-badge.is-warning {
+  background: color-mix(in srgb, #b07a2a 12%, transparent);
+  color: #7c5316;
+}
+
+/* ==========================================================================
+   Formulários
+   ========================================================================== */
+.luna-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.luna-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--luna-text);
+}
+
+.luna-input,
+.luna-select,
+.luna-textarea {
+  font-family: var(--luna-font-body);
+  font-size: 0.9rem;
+  color: var(--luna-text);
+  background: var(--luna-surface);
+  border: 1px solid var(--luna-line-strong);
+  border-radius: var(--luna-radius);
+  padding: 0.625rem 0.875rem;
+  transition:
+    border-color var(--luna-fast) var(--luna-ease),
+    box-shadow var(--luna-fast) var(--luna-ease);
+}
+
+.luna-input::placeholder,
+.luna-textarea::placeholder {
+  color: var(--luna-text-faint);
+}
+
+.luna-input:focus,
+.luna-select:focus,
+.luna-textarea:focus {
+  outline: none;
+  border-color: var(--luna-wine);
+  box-shadow: 0 0 0 3px var(--luna-wine-soft);
+}
+
+.luna-select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238d7b78' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.25rem;
+}
+
+/* ==========================================================================
+   Modal
+   ========================================================================== */
+.luna-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(48, 42, 43, 0.4);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: luna-fade-in var(--luna-med) var(--luna-ease);
+}
+
+.luna-modal {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  background: var(--luna-surface);
+  border: 1px solid var(--luna-line);
+  border-radius: var(--luna-radius-lg);
+  box-shadow: var(--luna-shadow-lg);
+  padding: 1.75rem;
+  animation: luna-rise var(--luna-med) var(--luna-ease);
+}
+
+.luna-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.375rem;
+}
+
+.luna-modal-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--luna-radius);
+  background: transparent;
+  color: var(--luna-text-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--luna-fast) var(--luna-ease), color var(--luna-fast) var(--luna-ease);
+}
+
+.luna-modal-close:hover {
+  background: var(--luna-wine-soft);
+  color: var(--luna-wine);
+}
+
+@keyframes luna-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes luna-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Estados vazios / loading
+   ========================================================================== */
+.luna-empty {
+  display: grid;
+  place-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--luna-text-muted);
+  border: 1px dashed var(--luna-line-strong);
+  border-radius: var(--luna-radius-lg);
+  background: var(--luna-surface);
+}
+
+.luna-spinner {
+  width: 36px;
+  height: 36px;
+  border: 2.5px solid var(--luna-wine-soft);
+  border-top-color: var(--luna-wine);
+  border-radius: 50%;
+  animation: luna-spin 0.7s linear infinite;
+}
+
+@keyframes luna-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton */
+.luna-skeleton {
+  border-radius: var(--luna-radius);
+  background: linear-gradient(
+    90deg,
+    var(--luna-line) 25%,
+    var(--luna-ivory) 50%,
+    var(--luna-line) 75%
+  );
+  background-size: 200% 100%;
+  animation: luna-shimmer 1.4s ease infinite;
+}
+
+@keyframes luna-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ==========================================================================
+   Shell: sidebar + topbar
+   ========================================================================== */
+.luna-shell {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.luna-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  padding: 1.75rem 1.25rem;
+  background: var(--luna-surface);
+  border-right: 1px solid var(--luna-line);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.luna-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0 0.25rem;
+}
+
+.luna-sidebar-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--luna-wine);
+  color: #fff;
+  font-family: var(--luna-font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.luna-sidebar-wordmark {
+  font-family: var(--luna-font-display);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--luna-text);
+}
+
+/* Evento atual em destaque */
+.luna-event-card {
+  padding: 1rem 1.125rem;
+  background: var(--luna-ivory);
+  border: 1px solid var(--luna-line);
+  border-radius: var(--luna-radius-lg);
+}
+
+.luna-event-card .luna-eyebrow {
+  margin-bottom: 0.375rem;
+}
+
+.luna-event-name {
+  font-family: var(--luna-font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--luna-text);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.luna-event-meta {
+  font-size: 0.78rem;
+  color: var(--luna-text-muted);
+  margin: 0.25rem 0 0;
+}
+
+/* Navegação */
+.luna-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.luna-nav-label {
+  padding: 0 0.75rem;
+  margin-bottom: 0.375rem;
+}
+
+.luna-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  font-family: var(--luna-font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  color: var(--luna-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--luna-radius);
+  cursor: pointer;
+  transition:
+    background-color var(--luna-fast) var(--luna-ease),
+    color var(--luna-fast) var(--luna-ease);
+}
+
+.luna-nav-item:hover {
+  background: var(--luna-wine-soft);
+  color: var(--luna-text);
+}
+
+.luna-nav-item:focus-visible {
+  outline: 2px solid var(--luna-wine);
+  outline-offset: 2px;
+}
+
+.luna-nav-item.is-active {
+  background: var(--luna-wine-soft);
+  color: var(--luna-wine);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--luna-wine);
+}
+
+.luna-nav-item.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.luna-nav-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.luna-nav-soon {
+  margin-left: auto;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--luna-text-faint);
+}
+
+/* Topbar */
+.luna-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 2rem;
+  background: color-mix(in srgb, var(--luna-ivory) 85%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--luna-line);
+}
+
+.luna-topbar-title {
+  font-family: var(--luna-font-display);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--luna-text);
+}
+
+.luna-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.luna-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--luna-radius);
+  background: transparent;
+  color: var(--luna-text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--luna-fast) var(--luna-ease),
+    color var(--luna-fast) var(--luna-ease),
+    border-color var(--luna-fast) var(--luna-ease);
+}
+
+.luna-icon-btn:hover {
+  background: var(--luna-wine-soft);
+  color: var(--luna-wine);
+}
+
+.luna-icon-btn:focus-visible {
+  outline: 2px solid var(--luna-wine);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Responsividade do shell
+   ========================================================================== */
+/* ==========================================================================
+   Dashboard — centro de comando
+   ========================================================================== */
+.luna-main {
+  min-width: 0;
+}
+
+.luna-content {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 4rem;
+}
+
+/* Hero editorial */
+.luna-hero {
+  position: relative;
+  padding: 0 0 2rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--luna-line);
+}
+
+.luna-hero .luna-eyebrow {
+  color: var(--luna-wine);
+  margin-bottom: 0.875rem;
+}
+
+.luna-hero-title {
+  font-family: var(--luna-font-display);
+  font-size: clamp(2.1rem, 4.5vw, 3.1rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--luna-text);
+  margin: 0 0 0.5rem;
+  max-width: 22ch;
+}
+
+.luna-hero-title em {
+  font-style: italic;
+  color: var(--luna-wine);
+}
+
+.luna-hero-sub {
+  font-size: 1rem;
+  color: var(--luna-text-muted);
+  margin: 0 0 1.5rem;
+  max-width: 52ch;
+}
+
+.luna-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.luna-countdown {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.luna-countdown-num {
+  font-family: var(--luna-font-display);
+  font-size: 2.4rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--luna-wine);
+  font-variant-numeric: tabular-nums;
+}
+
+.luna-countdown-label {
+  font-size: 0.85rem;
+  color: var(--luna-text-muted);
+}
+
+.luna-hero-date {
+  font-size: 0.9rem;
+  color: var(--luna-text-muted);
+}
+
+.luna-hero-date strong {
+  color: var(--luna-text);
+  font-weight: 600;
+}
+
+/* Faixa de progresso do planejamento */
+.luna-progress-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0;
+  border: 1px solid var(--luna-line);
+  border-radius: var(--luna-radius-lg);
+  background: var(--luna-surface);
+  overflow: hidden;
+  margin-bottom: 2rem;
+}
+
+.luna-stat {
+  padding: 1.25rem 1.5rem;
+  border-right: 1px solid var(--luna-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.luna-stat:last-child {
+  border-right: none;
+}
+
+.luna-stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--luna-text-muted);
+}
+
+.luna-stat-value {
+  font-family: var(--luna-font-display);
+  font-size: 1.9rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--luna-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.luna-stat-hint {
+  font-size: 0.78rem;
+  color: var(--luna-text-muted);
+}
+
+.luna-stat-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--luna-line);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.luna-stat-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--luna-wine);
+  border-radius: inherit;
+  transition: width var(--luna-med) var(--luna-ease);
+}
+
+.luna-stat-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #8f2f3e;
+}
+
+/* Bloco de atenção */
+.luna-attention {
+  border: 1px solid color-mix(in srgb, var(--luna-wine) 22%, var(--luna-line));
+  border-left: 3px solid var(--luna-wine);
+  border-radius: var(--luna-radius-lg);
+  background: var(--luna-surface);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.luna-attention-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.875rem;
+}
+
+.luna-attention-title {
+  font-family: var(--luna-font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--luna-wine);
+  margin: 0;
+}
+
+.luna-attention-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.luna-attention-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+  color: var(--luna-text);
+  border-top: 1px solid var(--luna-line);
+}
+
+.luna-attention-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.luna-attention-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--luna-wine);
+  margin-top: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Grid de duas colunas: tarefas + financeiro */
+.luna-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 1.75rem;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 900px) {
+  .luna-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Lista de tarefas */
+.luna-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.luna-task {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--luna-line);
+}
+
+.luna-task:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.luna-task-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.luna-task-check input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--luna-wine);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.luna-task-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--luna-text);
+}
+
+.luna-task.is-done .luna-task-title {
+  text-decoration: line-through;
+  color: var(--luna-text-faint);
+}
+
+.luna-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--luna-text-muted);
+  flex-shrink: 0;
+}
+
+.luna-task-star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.125rem;
+  color: var(--luna-text-faint);
+  transition: color var(--luna-fast) var(--luna-ease), transform var(--luna-fast) var(--luna-ease);
+}
+
+.luna-task-star:hover {
+  transform: scale(1.2);
+  color: var(--luna-champagne);
+}
+
+.luna-task-star.is-fav {
+  color: var(--luna-champagne);
+}
+
+/* Resumo financeiro */
+.luna-finance {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.luna-finance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--luna-line);
+}
+
+.luna-finance-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.luna-finance-row dt {
+  font-size: 0.88rem;
+  color: var(--luna-text-muted);
+}
+
+.luna-finance-row dd {
+  margin: 0;
+  font-family: var(--luna-font-display);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--luna-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.luna-finance-row.is-total {
+  border-top: 1px solid var(--luna-line-strong);
+  margin-top: 0.25rem;
+  padding-top: 0.875rem;
+}
+
+.luna-finance-row.is-total dd {
+  color: var(--luna-wine);
+  font-size: 1.3rem;
+}
+
+/* Módulos */
+.luna-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.luna-module {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.125rem 1.25rem;
+  background: var(--luna-surface);
+  border: 1px solid var(--luna-line);
+  border-radius: var(--luna-radius-lg);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--luna-font-body);
+  color: var(--luna-text);
+  transition:
+    border-color var(--luna-fast) var(--luna-ease),
+    transform var(--luna-fast) var(--luna-ease),
+    box-shadow var(--luna-fast) var(--luna-ease);
+}
+
+.luna-module:hover {
+  border-color: var(--luna-wine);
+  transform: translateY(-2px);
+  box-shadow: var(--luna-shadow);
+}
+
+.luna-module:focus-visible {
+  outline: 2px solid var(--luna-wine);
+  outline-offset: 2px;
+}
+
+.luna-module-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.luna-module-caption {
+  font-size: 0.78rem;
+  color: var(--luna-text-muted);
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   Responsividade do shell
+   ========================================================================== */
+@media (max-width: 900px) {
+  .luna-shell {
+    grid-template-columns: 1fr;
+  }
+
+
+  .luna-sidebar {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--luna-line);
+    padding: 1.25rem 1rem;
+    gap: 1.25rem;
+  }
+
+  .luna-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .luna-nav-item {
+    width: auto;
+  }
+
+  .luna-nav-label,
+  .luna-nav-soon {
+    display: none;
+  }
+
+  .luna-topbar {
+    padding: 0.75rem 1rem;
+  }
+}

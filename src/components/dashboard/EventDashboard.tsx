@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
 import type {
   Event,
   EventUpdate,
@@ -9,10 +8,8 @@ import type {
   Expense,
   Vendor,
 } from '../../lib/supabase/types'
-import { getThemeStyle } from '../../utils/theme'
 import {
   EVENT_TYPE_LABELS,
-  EVENT_TYPE_ICONS,
   EVENT_STATUS_LABELS,
   formatCurrency,
   formatDate,
@@ -48,22 +45,22 @@ interface EventDashboardProps {
 }
 
 const MODULES = [
-  { id: 'guests', icon: '👥', title: 'Convidados', caption: 'RSVP, mesas e grupos' },
-  { id: 'vendors', icon: '🤝', title: 'Fornecedores', caption: 'Contratos e contatos' },
-  { id: 'tasks', icon: '✅', title: 'Tarefas', caption: 'Checklist do evento' },
-  { id: 'expenses', icon: '💰', title: 'Orçamento', caption: 'Despesas e custos' },
-  { id: 'gifts', icon: '🎁', title: 'Presentes', caption: 'Lista de registro' },
+  { id: 'guests', title: 'Convidados', caption: 'RSVP, mesas e grupos' },
+  { id: 'vendors', title: 'Fornecedores', caption: 'Contratos e contatos' },
+  { id: 'tasks', title: 'Tarefas', caption: 'Checklist do evento' },
+  { id: 'expenses', title: 'Orçamento', caption: 'Despesas e custos' },
+  { id: 'gifts', title: 'Presentes', caption: 'Lista de registro' },
 ]
 
 const SIDEBAR_NAV = [
-  { id: 'dashboard', icon: '🏠', label: 'Painel' },
-  { id: 'guests', icon: '👥', label: 'Convidados' },
-  { id: 'tables', icon: '🪑', label: 'Mesas' },
-  { id: 'vendors', icon: '🤝', label: 'Fornecedores' },
-  { id: 'tasks', icon: '✅', label: 'Tarefas' },
-  { id: 'expenses', icon: '💰', label: 'Orçamento' },
-  { id: 'gifts', icon: '🎁', label: 'Presentes' },
-  { id: 'settings', icon: '⚙️', label: 'Configurações' },
+  { id: 'dashboard', label: 'Painel' },
+  { id: 'guests', label: 'Convidados' },
+  { id: 'tables', label: 'Mesas' },
+  { id: 'vendors', label: 'Fornecedores' },
+  { id: 'tasks', label: 'Tarefas' },
+  { id: 'expenses', label: 'Orçamento' },
+  { id: 'gifts', label: 'Presentes' },
+  { id: 'settings', label: 'Configurações' },
 ] as const
 
 interface Member {
@@ -81,24 +78,15 @@ interface DashboardData {
 }
 
 const PRIORITY_BADGE: Record<TaskPriority, { label: string; className: string }> = {
-  high: { label: 'Urgent', className: 'task-priority-urgent' },
-  medium: { label: 'Medium', className: 'task-priority-medium' },
-  low: { label: 'Low', className: 'task-priority-low' },
-}
-
-function initials(name: string | null | undefined, email: string | null | undefined): string {
-  if (name) {
-    const parts = name.trim().split(/\s+/)
-    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-    return name.trim().slice(0, 2).toUpperCase()
-  }
-  if (email) return email.slice(0, 2).toUpperCase()
-  return '?'
+  high: { label: 'Urgente', className: 'is-danger' },
+  medium: { label: 'Média', className: 'is-warning' },
+  low: { label: 'Baixa', className: 'is-outline' },
 }
 
 /**
- * Dashboard principal do LUNA com KPIs reais (tarefas, convidados, orçamento
- * e equipe), bloco de atenção, próximas tarefas e resumo financeiro.
+ * Dashboard principal do LUNA — centro de comando do evento.
+ * Redesign visual "Wedding Editorial": hero editorial, faixa de progresso,
+ * bloco de atenção, próximas tarefas e resumo financeiro.
  */
 export function EventDashboard({
   event,
@@ -113,40 +101,27 @@ export function EventDashboard({
   onSaveEvent,
   onDeleteEvent,
 }: EventDashboardProps) {
-  const themeStyle = useMemo<CSSProperties>(
-    () =>
-      getThemeStyle(
-        event.theme_preset,
-        event.theme_preset === 'custom'
-          ? {
-              primary: event.custom_primary,
-              secondary: event.custom_secondary,
-              accent: event.custom_accent,
-            }
-          : undefined,
-      ),
-    [event.theme_preset, event.custom_primary, event.custom_secondary, event.custom_accent],
-  )
-
   const dateDiff = useMemo(() => buildDateDiff(event.date), [event.date])
   const coupleText = getCoupleLabel(event)
 
-  const countdownText = dateDiff
+  const countdownNumber = dateDiff
     ? dateDiff.years > 0
-      ? `${dateDiff.years} ${dateDiff.years === 1 ? 'ano' : 'anos'} e ${dateDiff.days} ${
-          dateDiff.days === 1 ? 'dia' : 'dias'
-        } para o grande dia`
+      ? dateDiff.years * 365 + dateDiff.days
       : dateDiff.months > 0
-        ? `${dateDiff.months} ${dateDiff.months === 1 ? 'mês' : 'meses'} e ${dateDiff.days} ${
-            dateDiff.days === 1 ? 'dia' : 'dias'
-          } para o grande dia`
-        : `${dateDiff.days} ${dateDiff.days === 1 ? 'dia' : 'dias'} para o grande dia`
+        ? dateDiff.months * 30 + dateDiff.days
+        : dateDiff.days
     : null
+
+  const countdownLabel =
+    countdownNumber === null
+      ? null
+      : countdownNumber === 1
+        ? 'dia para o grande dia'
+        : 'dias para o grande dia'
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
 
   const [data, setData] = useState<DashboardData>({
     guests: [],
@@ -210,7 +185,6 @@ export function EventDashboard({
   const urgentOpenTasks = data.tasks.filter((t) => !t.completed && t.priority === 'high')
   const attentionTaskCount = overdueTasks.length + urgentOpenTasks.length
 
-  // Próximas tarefas: no prazo (hoje ou futuro) ou sem data, mais urgentes primeiro.
   const upcomingTasks = data.tasks
     .filter((t) => !t.completed && !isOverdue(t))
     .sort((a, b) => {
@@ -226,7 +200,6 @@ export function EventDashboard({
   /* ---------- Alertas "O que precisa de atenção" ---------- */
   interface AttentionItem {
     key: string
-    icon: string
     text: string
   }
   const attentionItems: AttentionItem[] = []
@@ -234,7 +207,6 @@ export function EventDashboard({
   if (overdueTasks.length > 0) {
     attentionItems.push({
       key: 'overdue-tasks',
-      icon: '⏰',
       text: `${overdueTasks.length} ${overdueTasks.length === 1 ? 'tarefa vencida' : 'tarefas vencidas'} — ${overdueTasks
         .slice(0, 3)
         .map((t) => t.title)
@@ -245,7 +217,6 @@ export function EventDashboard({
   if (budget > 0 && totalPaid > budget) {
     attentionItems.push({
       key: 'budget-over',
-      icon: '💸',
       text: `Orçamento estourado em ${formatCurrency(totalPaid - budget)} (${formatCurrency(totalPaid)} de ${formatCurrency(budget)})`,
     })
   }
@@ -257,7 +228,6 @@ export function EventDashboard({
     const total = overdueExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
     attentionItems.push({
       key: 'overdue-expenses',
-      icon: '🧾',
       text: `${overdueExpenses.length} ${overdueExpenses.length === 1 ? 'pagamento a fornecedor vencido' : 'pagamentos a fornecedores vencidos'} (${formatCurrency(total)})`,
     })
   }
@@ -266,7 +236,6 @@ export function EventDashboard({
   if (pendingVendors.length > 0) {
     attentionItems.push({
       key: 'pending-vendors',
-      icon: '🤝',
       text: `${pendingVendors.length} ${pendingVendors.length === 1 ? 'fornecedor aguardando contrato' : 'fornecedores aguardando contrato'} — ${pendingVendors
         .slice(0, 3)
         .map((v) => v.name)
@@ -313,8 +282,10 @@ export function EventDashboard({
     else if (id === 'settings') void onOpenSettings()
   }
 
+  const isDashboard = activeSection === 'dashboard'
+
   return (
-    <div className="dashboard-shell" style={themeStyle}>
+    <div className="luna">
       <input
         ref={fileInputRef}
         type="file"
@@ -324,37 +295,24 @@ export function EventDashboard({
         aria-hidden="true"
       />
 
-      <div className={`app-layout${collapsed ? ' is-collapsed' : ''}`}>
-        <aside className={`event-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Menu do evento">
-          <button
-            type="button"
-            className="sidebar-toggle"
-            onClick={() => setCollapsed((v) => !v)}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? 'Expandir menu' : 'Minimizar menu'}
-            title={collapsed ? 'Expandir menu' : 'Minimizar menu'}
-          >
-            <span aria-hidden="true">{collapsed ? '»' : '«'}</span>
-          </button>
+      <div className="luna-shell">
+        {/* ===== Sidebar ===== */}
+        <aside className="luna-sidebar" aria-label="Menu do evento">
+          <div className="luna-sidebar-brand">
+            <span className="luna-sidebar-mark" aria-hidden="true">L</span>
+            <span className="luna-sidebar-wordmark">Luna</span>
+          </div>
 
-          <div className="sidebar-profile">
-            <button type="button" className="sidebar-avatar-wrap" onClick={handlePickPhoto} disabled={uploading} aria-label="Alterar foto de perfil do evento">
-              {event.cover_image_url ? (
-                <img className="sidebar-avatar" src={event.cover_image_url} alt="Foto de perfil do evento" />
-              ) : (
-                <span className="sidebar-avatar sidebar-avatar-fallback" aria-hidden="true">
-                  {EVENT_TYPE_ICONS[event.event_type]}
-                </span>
-              )}
-              <span className="sidebar-avatar-badge" aria-hidden="true">{uploading ? '⏳' : '📷'}</span>
-            </button>
-            <h2 className="sidebar-event-name">{event.title}</h2>
-            <p className="sidebar-event-type">
-              {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]}
+          <div className="luna-event-card">
+            <p className="luna-eyebrow">Evento atual</p>
+            <p className="luna-event-name">{event.title}</p>
+            <p className="luna-event-meta">
+              {EVENT_TYPE_LABELS[event.event_type]} · {formatDate(event.date)}
             </p>
           </div>
 
-          <nav className="sidebar-nav">
+          <nav className="luna-nav" aria-label="Navegação do evento">
+            <p className="luna-eyebrow luna-nav-label">Planejamento</p>
             {SIDEBAR_NAV.map((item) => {
               const isEnabled =
                 item.id === 'dashboard' ||
@@ -378,51 +336,58 @@ export function EventDashboard({
                 <button
                   key={item.id}
                   type="button"
-                  className={`sidebar-nav-item${isActive ? ' is-active' : ''}${isEnabled ? '' : ' is-disabled'}`}
+                  className={`luna-nav-item${isActive ? ' is-active' : ''}${isEnabled ? '' : ' is-disabled'}`}
                   disabled={!isEnabled}
                   onClick={() => handleNav(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
                 >
-                  <span className="sidebar-nav-icon" aria-hidden="true">{item.icon}</span>
-                  <span className="sidebar-nav-label">{item.label}</span>
-                  {!isEnabled && <span className="sidebar-nav-soon">em breve</span>}
+                  <span className="luna-nav-label-text">{item.label}</span>
+                  {!isEnabled && <span className="luna-nav-soon">em breve</span>}
                 </button>
               )
             })}
           </nav>
 
           {events.length > 1 && (
-            <div className="sidebar-event-switch">
-              <label className="form-label" htmlFor="sidebar-event-select">Trocar evento</label>
-              <select id="sidebar-event-select" className="form-control" value={event.id} onChange={(e) => onSelectEvent(e.target.value)}>
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label className="luna-label" htmlFor="sidebar-event-select">Trocar evento</label>
+              <select
+                id="sidebar-event-select"
+                className="luna-select"
+                value={event.id}
+                onChange={(e) => onSelectEvent(e.target.value)}
+              >
                 {events.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.title} · {formatDate(e.date)} · {e.code}
+                    {e.title} · {formatDate(e.date)}
                   </option>
                 ))}
               </select>
               <button
                 type="button"
-                className="btn-secondary"
+                className="luna-btn luna-btn-danger"
                 onClick={() => void onDeleteEvent(event.id)}
               >
-                Excluir evento atual
+                Excluir evento
               </button>
             </div>
           )}
         </aside>
 
-        <main className="event-main">
-          <header className="dashboard-topbar">
-            <div className="dashboard-brand">
-              <span className="dashboard-brand-mark" aria-hidden="true">{EVENT_TYPE_ICONS[event.event_type]}</span>
-              <span className="dashboard-brand-name">Wedding & Events Planner</span>
-            </div>
-            <div className="dashboard-controls">
-              <button type="button" className="btn-secondary" onClick={onOpenSettings}>Configurações</button>
+        {/* ===== Conteúdo ===== */}
+        <main className="luna-main">
+          <header className="luna-topbar">
+            <span className="luna-topbar-title">
+              {isDashboard ? 'Painel' : EVENT_TYPE_LABELS[event.event_type]}
+            </span>
+            <div className="luna-topbar-actions">
+              <button type="button" className="luna-btn luna-btn-ghost" onClick={onOpenSettings}>
+                Configurações
+              </button>
             </div>
           </header>
 
-          <div className="dashboard-main">
+          <div className="luna-content">
             {activeSection === 'guests' ? (
               <GuestList event={event} />
             ) : activeSection === 'tasks' ? (
@@ -439,149 +404,157 @@ export function EventDashboard({
               <SeatingChart event={event} />
             ) : (
               <>
-                <section className="event-hero" aria-label="Resumo do evento">
-                  {event.cover_image_url && (
-                    <div className="event-hero-bg" style={{ backgroundImage: `url(${event.cover_image_url})` }} aria-hidden="true" />
-                  )}
-                  <span className="event-hero-badge">
-                    {EVENT_TYPE_ICONS[event.event_type]} {EVENT_TYPE_LABELS[event.event_type]} · {EVENT_STATUS_LABELS[event.status]}
-                  </span>
-                  <h1 className="event-hero-title">
-                    {coupleText ?? event.title}
+                {/* ===== Hero editorial ===== */}
+                <section className="luna-hero" aria-label="Resumo do evento">
+                  <p className="luna-eyebrow">
+                    {EVENT_TYPE_LABELS[event.event_type]} · {EVENT_STATUS_LABELS[event.status]}
+                  </p>
+                  <h1 className="luna-hero-title">
+                    {coupleText ? (
+                      <>
+                        {coupleText.split(' & ')[0]} <em>&</em> {coupleText.split(' & ')[1] ?? ''}
+                      </>
+                    ) : (
+                      event.title
+                    )}
                   </h1>
-                  {coupleText && event.title !== coupleText && (
-                    <p className="event-hero-couple">{event.title}</p>
+                  <p className="luna-hero-sub">
+                    Seu planejamento está sob controle. Acompanhe o progresso, as decisões pendentes
+                    e os próximos passos do seu {EVENT_TYPE_LABELS[event.event_type].toLowerCase()}.
+                  </p>
+                  <div className="luna-hero-meta">
+                    {countdownNumber !== null && (
+                      <span className="luna-countdown">
+                        <span className="luna-countdown-num">{countdownNumber}</span>
+                        <span className="luna-countdown-label">{countdownLabel}</span>
+                      </span>
+                    )}
+                    {event.date && (
+                      <span className="luna-hero-date">
+                        Data planejada: <strong>{formatDate(event.date)}</strong>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="luna-btn luna-btn-secondary"
+                      onClick={handlePickPhoto}
+                      disabled={uploading}
+                    >
+                      {uploading ? 'Enviando…' : event.cover_image_url ? 'Trocar foto de capa' : 'Adicionar foto de capa'}
+                    </button>
+                  </div>
+                  {uploadError && (
+                    <p className="luna-caption" role="alert" style={{ color: '#8f2f3e', marginTop: '0.75rem' }}>
+                      {uploadError}
+                    </p>
                   )}
-
-                  {countdownText && (
-                    <p className="event-hero-countdown-text">✨ {countdownText}</p>
-                  )}
-                  {event.date && (
-                    <p className="event-hero-date">Data planejada: {formatDate(event.date)}</p>
-                  )}
-                  <button type="button" className="hero-photo-btn" onClick={handlePickPhoto} disabled={uploading}>
-                    {uploading ? 'Enviando...' : event.cover_image_url ? '📷 Trocar foto' : '📷 Adicionar foto'}
-                  </button>
                 </section>
 
-                {uploadError && <p className="auth-error" role="alert">⚠ {uploadError}</p>}
-
-                {/* KPIs */}
-                <section className="kpi-grid" aria-label="Métricas do evento">
-                  <article className="kpi-card">
-                    <span className="kpi-card-icon" aria-hidden="true">✅</span>
-                    <div className="kpi-card-body">
-                      <span className="kpi-card-label">Tarefas do Evento</span>
-                      <span className="kpi-card-value">{completedTasks} / {totalTasks}</span>
-                      <div className="kpi-progress" role="progressbar" aria-valuenow={taskProgress} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso das tarefas">
-                        <span className="kpi-progress-fill" style={{ width: `${taskProgress}%` }} />
+                {/* ===== Faixa de progresso ===== */}
+                <section aria-label="Métricas do evento">
+                  <div className="luna-progress-strip">
+                    <div className="luna-stat">
+                      <span className="luna-stat-label">Tarefas</span>
+                      <span className="luna-stat-value">{completedTasks}<span style={{ color: 'var(--luna-text-faint)', fontSize: '1.2rem' }}> / {totalTasks}</span></span>
+                      <div className="luna-stat-bar" role="progressbar" aria-valuenow={taskProgress} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso das tarefas">
+                        <span className="luna-stat-bar-fill" style={{ width: `${taskProgress}%` }} />
                       </div>
-                      <span className="kpi-card-hint">{taskProgress}% concluídas</span>
+                      <span className="luna-stat-hint">{taskProgress}% concluídas</span>
                       {attentionTaskCount > 0 && (
-                        <span className="kpi-alert" role="alert">
-                          ⚠ {attentionTaskCount} {attentionTaskCount === 1 ? 'tarefa atrasada/urgente' : 'tarefas atrasadas/urgentes'}
+                        <span className="luna-stat-alert" role="alert">
+                          {attentionTaskCount} {attentionTaskCount === 1 ? 'atrasada/urgente' : 'atrasadas/urgentes'}
                         </span>
                       )}
                     </div>
-                  </article>
 
-                  <article className="kpi-card">
-                    <span className="kpi-card-icon" aria-hidden="true">👥</span>
-                    <div className="kpi-card-body">
-                      <span className="kpi-card-label">Total de Convidados</span>
-                      <span className="kpi-card-value">{confirmedGuests} <span className="kpi-card-muted">/ {totalGuests}</span></span>
-                      <span className="kpi-card-hint">
+                    <div className="luna-stat">
+                      <span className="luna-stat-label">Convidados</span>
+                      <span className="luna-stat-value">{confirmedGuests}<span style={{ color: 'var(--luna-text-faint)', fontSize: '1.2rem' }}> / {totalGuests}</span></span>
+                      <span className="luna-stat-hint">
                         {confirmedGuests} confirmados{pendingGuests > 0 ? ` · ${pendingGuests} pendente${pendingGuests > 1 ? 's' : ''}` : ''}
                       </span>
                     </div>
-                  </article>
 
-                  <article className="kpi-card">
-                    <span className="kpi-card-icon" aria-hidden="true">💰</span>
-                    <div className="kpi-card-body">
-                      <span className="kpi-card-label">Orçamento do Evento</span>
-                      <span className="kpi-card-value">{formatCurrency(totalPaid)}</span>
-                      <div className="kpi-progress" role="progressbar" aria-valuenow={budgetPercent} aria-valuemin={0} aria-valuemax={100} aria-label="Percentual pago do orçamento">
-                        <span className="kpi-progress-fill" style={{ width: `${budgetPercent}%` }} />
+                    <div className="luna-stat">
+                      <span className="luna-stat-label">Orçamento</span>
+                      <span className="luna-stat-value" style={{ fontSize: '1.5rem' }}>{formatCurrency(totalPaid)}</span>
+                      <div className="luna-stat-bar" role="progressbar" aria-valuenow={budgetPercent} aria-valuemin={0} aria-valuemax={100} aria-label="Percentual pago do orçamento">
+                        <span className="luna-stat-bar-fill" style={{ width: `${budgetPercent}%` }} />
                       </div>
-                      <span className="kpi-card-hint">{budget > 0 ? `${budgetPercent}% pago de ${formatCurrency(budget)}` : 'Meta não definida'}</span>
+                      <span className="luna-stat-hint">{budget > 0 ? `${budgetPercent}% pago de ${formatCurrency(budget)}` : 'Meta não definida'}</span>
                     </div>
-                  </article>
 
-                  <article className="kpi-card">
-                    <span className="kpi-card-icon" aria-hidden="true">🤝</span>
-                    <div className="kpi-card-body">
-                      <span className="kpi-card-label">Equipe / Organizadores</span>
-                      <div className="team-avatars">
-                        <span className="team-avatar" title={event.client_name_1 ?? 'Você'} aria-label={event.client_name_1 ?? 'Você'}>
-                          {initials(event.client_name_1, null)}
-                        </span>
-                        {data.members.map((m) => (
-                          <span key={m.user_id} className="team-avatar" title={m.full_name ?? m.email ?? 'Membro'} aria-label={m.full_name ?? m.email ?? 'Membro'}>
-                            {initials(m.full_name, m.email)}
-                          </span>
-                        ))}
-                      </div>
-                      <span className="kpi-card-hint">{data.members.length} organizadores</span>
+                    <div className="luna-stat">
+                      <span className="luna-stat-label">Equipe</span>
+                      <span className="luna-stat-value">{data.members.length + 1}</span>
+                      <span className="luna-stat-hint">
+                        {data.members.length + 1 === 1 ? 'organizador' : 'organizadores'} no evento
+                      </span>
                     </div>
-                  </article>
+                  </div>
                 </section>
 
-                {/* O que precisa de atenção */}
+                {/* ===== O que precisa de atenção ===== */}
                 {attentionItems.length > 0 && (
-                  <section className="attention-card" aria-labelledby="attention-title">
-                    <div className="attention-card-head">
-                      <span className="attention-card-icon" aria-hidden="true">⚠️</span>
-                      <h2 id="attention-title" className="attention-card-title">O que precisa de atenção</h2>
+                  <section className="luna-attention" aria-labelledby="attention-title">
+                    <div className="luna-attention-head">
+                      <h2 id="attention-title" className="luna-attention-title">O que precisa de atenção</h2>
                     </div>
-                    <ul className="attention-list">
+                    <ul className="luna-attention-list">
                       {attentionItems.map((item) => (
-                        <li key={item.key} className="attention-item">
-                          <span className="attention-item-icon" aria-hidden="true">{item.icon}</span>
-                          <span className="attention-item-text">{item.text}</span>
+                        <li key={item.key} className="luna-attention-item">
+                          <span className="luna-attention-dot" aria-hidden="true" />
+                          <span>{item.text}</span>
                         </li>
                       ))}
                     </ul>
                   </section>
                 )}
 
-                {/* Próximas tarefas + resumo financeiro */}
-                <div className="dashboard-columns">
-                  <section className="dashboard-panel" aria-labelledby="upcoming-title">
-                    <div className="dashboard-panel-head">
-                      <h2 id="upcoming-title" className="section-heading">Próximas tarefas</h2>
-                      <button type="button" className="link-btn" onClick={onOpenTasks}>Ver Kanban Completo →</button>
+                {/* ===== Próximas tarefas + financeiro ===== */}
+                <div className="luna-cols">
+                  <section className="luna-panel luna-panel-pad" aria-labelledby="upcoming-title">
+                    <div className="luna-section-head">
+                      <h2 id="upcoming-title" className="luna-h2">Próximas tarefas</h2>
+                      <button type="button" className="luna-link" onClick={onOpenTasks}>
+                        Ver Kanban →
+                      </button>
                     </div>
 
                     {upcomingTasks.length === 0 ? (
-                      <p className="guest-list-empty">Nenhuma tarefa pendente. 🎉</p>
+                      <div className="luna-empty">
+                        <p className="luna-lead">Nenhuma tarefa pendente.</p>
+                        <p className="luna-caption">Tudo em dia por aqui.</p>
+                      </div>
                     ) : (
-                      <ul className="task-list-dash">
+                      <ul className="luna-task-list">
                         {upcomingTasks.map((task) => {
                           const p = PRIORITY_BADGE[task.priority] ?? PRIORITY_BADGE.low
                           const favorite = task.priority === 'high'
                           return (
-                            <li key={task.id} className={`task-row-dash${task.completed ? ' is-done' : ''}`}>
-                              <div className="task-row-dash-top">
-                                <label className="task-check">
-                                  <input type="checkbox" checked={task.completed} onChange={() => void toggleTask(task)} aria-label={`Concluir ${task.title}`} />
-                                  <span className="task-check-title">{task.title}</span>
-                                </label>
+                            <li key={task.id} className={`luna-task${task.completed ? ' is-done' : ''}`}>
+                              <label className="luna-task-check">
+                                <input
+                                  type="checkbox"
+                                  checked={task.completed}
+                                  onChange={() => void toggleTask(task)}
+                                  aria-label={`Concluir ${task.title}`}
+                                />
+                                <span className="luna-task-title">{task.title}</span>
+                              </label>
+                              <div className="luna-task-meta">
+                                {task.due_date && <span>{formatDate(task.due_date)}</span>}
+                                <span className={`luna-badge ${p.className}`}>{p.label}</span>
                                 <button
                                   type="button"
-                                  className="task-star"
+                                  className={`luna-task-star${favorite ? ' is-fav' : ''}`}
                                   aria-label={favorite ? `Remover ${task.title} dos favoritos` : `Favoritar ${task.title}`}
                                   aria-pressed={favorite}
                                   title={favorite ? 'Remover dos favoritos' : 'Favoritar'}
                                   onClick={() => void toggleFavorite(task)}
                                 >
-                                  {favorite ? '⭐' : '☆'}
+                                  {favorite ? '★' : '☆'}
                                 </button>
-                              </div>
-                              <div className="task-row-meta">
-                                {task.category && <span className="task-cat">{task.category}</span>}
-                                <span className={`task-priority ${p.className}`}>{p.label}</span>
-                                {task.due_date && <span className="task-due">📅 {formatDate(task.due_date)}</span>}
                               </div>
                             </li>
                           )
@@ -590,37 +563,46 @@ export function EventDashboard({
                     )}
                   </section>
 
-                  <section className="dashboard-panel" aria-labelledby="finance-title">
-                    <h2 id="finance-title" className="section-heading">Resumo financeiro</h2>
-                    <dl className="finance-list">
-                      <div className="finance-row">
-                        <dt>Total Contratado</dt>
+                  <section className="luna-panel luna-panel-pad" aria-labelledby="finance-title">
+                    <div className="luna-section-head">
+                      <h2 id="finance-title" className="luna-h2">Resumo financeiro</h2>
+                    </div>
+                    <dl className="luna-finance">
+                      <div className="luna-finance-row">
+                        <dt>Total contratado</dt>
                         <dd>{formatCurrency(totalContratado)}</dd>
                       </div>
-                      <div className="finance-row">
-                        <dt>Total Já Pago</dt>
+                      <div className="luna-finance-row">
+                        <dt>Total já pago</dt>
                         <dd>{formatCurrency(totalPaid)}</dd>
                       </div>
-                      <div className="finance-row is-total">
-                        <dt>Saldo Pendente</dt>
+                      <div className="luna-finance-row is-total">
+                        <dt>Saldo pendente</dt>
                         <dd>{formatCurrency(saldoPendente)}</dd>
                       </div>
                     </dl>
-                    <button type="button" className="btn-secondary" style={{ marginTop: '1rem' }} onClick={onOpenTasks}>
-                      Gerenciar Orçamento
+                    <button
+                      type="button"
+                      className="luna-btn luna-btn-secondary"
+                      style={{ marginTop: '1.25rem', alignSelf: 'flex-start' }}
+                      onClick={onOpenTasks}
+                    >
+                      Gerenciar orçamento
                     </button>
                   </section>
                 </div>
 
-                {/* Módulos */}
-                <section className="modules-section" aria-labelledby="modules-heading">
-                  <h2 id="modules-heading" className="section-heading">Meu planejamento</h2>
-                  <div className="module-grid">
+                {/* ===== Módulos ===== */}
+                <section className="luna-section" aria-labelledby="modules-heading">
+                  <div className="luna-section-head">
+                    <h2 id="modules-heading" className="luna-h2">Meu planejamento</h2>
+                  </div>
+                  <div className="luna-modules">
                     {MODULES.map((module) => (
                       <button
                         key={module.id}
                         type="button"
-                        className="module-card"
+                        className="luna-module"
                         aria-label={`Abrir módulo ${module.title}`}
                         onClick={
                           module.id === 'guests'
@@ -630,9 +612,8 @@ export function EventDashboard({
                               : undefined
                         }
                       >
-                        <span className="module-card-icon" aria-hidden="true">{module.icon}</span>
-                        <span className="module-card-title">{module.title}</span>
-                        <span className="module-card-caption">{module.caption}</span>
+                        <span className="luna-module-title">{module.title}</span>
+                        <span className="luna-module-caption">{module.caption}</span>
                       </button>
                     ))}
                   </div>
